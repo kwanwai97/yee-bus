@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>全港巴士實時到站系統 • 完美版</title>
+    <style>
+        /* 全部樣式保持不變（略）—— 与原文件相同，此处省略以减少篇幅，实际使用时请保留完整样式 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 12px; display: flex; justify-content: center; min-height: 100vh; }
+        .app-container { width: 100%; max-width: 480px; background-color: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08); padding: 18px 16px 24px; }
+        .header { text-align: center; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 2px solid #e9ecef; }
+        .header h1 { font-size: 1.5rem; font-weight: 700; color: #1a1a2e; letter-spacing: 0.5px; margin: 0; }
+        .header .sub-info { display: flex; justify-content: space-between; font-size: 0.7rem; color: #6c757d; margin-top: 4px; flex-wrap: wrap; }
+        .header .sub-info span { background: #f8f9fa; padding: 2px 8px; border-radius: 12px; }
+        .search-panel { background: #f8f9fc; border-radius: 16px; padding: 14px 12px; margin-bottom: 16px; border: 1px solid #e9ecef; }
+        .input-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .input-row select, .input-row input { padding: 10px 12px; border: 1px solid #ced4da; border-radius: 10px; font-size: 0.95rem; background-color: #fff; transition: border-color 0.2s; }
+        .input-row select:focus, .input-row input:focus { border-color: #4dabf7; outline: none; box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25); }
+        .input-row select { flex: 0 0 auto; min-width: 80px; font-weight: 600; }
+        .input-row input { flex: 1; min-width: 120px; text-transform: uppercase; }
+        .btn-group { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .btn-group .btn { flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; min-width: 80px; }
+        .btn-group .btn:active { transform: scale(0.97); }
+        .btn-outbound { background: #2b8a3e; }
+        .btn-inbound { background: #1c7ed6; }
+        .btn-outbound:hover { background: #237032; }
+        .btn-inbound:hover { background: #1864ab; }
+        .station-select-box { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #ced4da; font-size: 0.9rem; background-color: #fff; margin-bottom: 10px; }
+        .add-row { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+        .add-row .btn { flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-weight: 700; font-size: 0.9rem; color: #fff; cursor: pointer; transition: opacity 0.2s; min-width: 100px; }
+        .add-row .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-add { background: #495057; }
+        .btn-add:not(:disabled):hover { background: #343a40; }
+        .btn-quick { background: #2b8a3e; }
+        .btn-quick:not(:disabled):hover { background: #237032; }
+        .btn-quick:disabled { background: #adb5bd; }
+        .btn-locate { background: #e67700; flex: 0.7 !important; min-width: 70px !important; }
+        .btn-locate:not(:disabled):hover { background: #cc6a00; }
+        .btn-locate:disabled { background: #adb5bd; }
+        .btn-locate.locating { background: #1c7ed6; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .monitor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+        .monitor-header .title { font-weight: 700; font-size: 1.05rem; color: #212529; }
+        .monitor-header .actions { display: flex; gap: 8px; }
+        .monitor-header .actions button { background: none; border: 1px solid #dee2e6; border-radius: 20px; padding: 4px 12px; font-size: 0.7rem; color: #495057; cursor: pointer; transition: all 0.15s; }
+        .monitor-header .actions button:hover { background: #e9ecef; }
+        #busList { display: flex; flex-direction: column; gap: 10px; }
+        .route-item { display: flex; align-items: center; padding: 12px 10px; background: #f8f9fa; border-radius: 14px; border-left: 4px solid #adb5bd; transition: background 0.1s; position: relative; }
+        .route-item .badge { font-size: 0.65rem; font-weight: 700; padding: 4px 8px; border-radius: 30px; color: #fff; min-width: 42px; text-align: center; letter-spacing: 0.3px; flex-shrink: 0; }
+        .badge-kmb { background: #d63333; }
+        .badge-ctb { background: #f59f00; color: #212529; }
+        .badge-nlb { background: #1c7ed6; }
+        .route-name { font-size: 1.2rem; font-weight: 700; margin-left: 8px; min-width: 48px; color: #1a1a2e; }
+        .route-info { flex: 1; margin-left: 10px; min-width: 0; }
+        .route-dest { font-size: 0.9rem; font-weight: 600; color: #212529; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .dir-badge { font-size: 0.6rem; padding: 2px 6px; border-radius: 30px; color: #fff; font-weight: 600; background: #6c757d; }
+        .dir-out { background: #2b8a3e; }
+        .dir-in { background: #1c7ed6; }
+        .station-name { font-size: 0.75rem; color: #495057; margin-top: 2px; word-break: break-word; }
+        .walk-info { font-size: 0.7rem; color: #6c757d; margin-top: 2px; }
+        .status-badge { display: inline-block; font-size: 0.6rem; font-weight: 700; padding: 2px 8px; border-radius: 30px; color: #fff; margin-top: 4px; }
+        .status-ok { background: #2b8a3e; }
+        .status-rush { background: #e67700; }
+        .status-late { background: #c92a2a; }
+        .route-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 6px; }
+        .eta-multi { text-align: right; font-weight: 700; font-size: 0.8rem; color: #d63333; min-width: 60px; line-height: 1.3; }
+        .eta-multi .eta-min { display: block; }
+        .eta-multi .eta-min.small { font-size: 0.65rem; color: #6c757d; font-weight: 400; }
+        .del-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #adb5bd; transition: color 0.15s; padding: 0 4px; }
+        .del-btn:hover { color: #c92a2a; }
+        .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
+        .loading-dots::after { content: '...'; animation: dots 1.2s steps(3, end) infinite; }
+        @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
+        @media (max-width: 400px) { .input-row select { min-width: 70px; font-size: 0.8rem; } .route-name { font-size: 1rem; min-width: 40px; } .route-dest { font-size: 0.8rem; } .eta-multi { font-size: 0.7rem; min-width: 50px; } .btn-locate { flex: 0.6 !important; min-width: 60px !important; font-size: 0.75rem !important; padding: 10px 4px !important; } }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #212529; color: #fff; padding: 10px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); z-index: 999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; max-width: 90%; }
+        .toast.show { opacity: 1; }
+        .quick-hint { font-size: 0.7rem; color: #6c757d; margin-top: 4px; text-align: right; min-height: 1.2rem; transition: color 0.3s; cursor: pointer; }
+        .quick-hint.active { color: #2b8a3e; }
+        .quick-hint.error { color: #c92a2a; }
+        .quick-hint .hint-btn { color: #1c7ed6; font-weight: 600; cursor: pointer; text-decoration: underline; background: none; border: none; font-size: inherit; padding: 0 2px; }
+        .quick-hint .hint-btn:hover { color: #1864ab; }
+        .gps-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; transition: background 0.3s; }
+        .gps-dot.ok { background: #2b8a3e; }
+        .gps-dot.error { background: #c92a2a; }
+        .gps-dot.pending { background: #f59f00; animation: pulse 1s infinite; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>🚌 全港巴士 · 實時到站</h1>
+            <div class="sub-info">
+                <span id="refreshTime">🔄 載入中...</span>
+                <span id="gpsStatus">📡 定位中...</span>
+            </div>
+        </div>
+        <div class="search-panel">
+            <div class="input-row">
+                <select id="companySelect">
+                    <option value="KMB" selected>九巴</option>
+                    <option value="CTB">城巴</option>
+                    <option value="NLB">嶼巴</option>
+                </select>
+                <input type="text" id="routeInput" placeholder="輸入路線 (如 1, 11, 106)" autocomplete="off">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-outbound" id="expandOutBtn">🟢 正向站</button>
+                <button class="btn btn-inbound" id="expandInBtn">🔵 反向站</button>
+            </div>
+            <select id="stationSelect" class="station-select-box">
+                <option value="">-- 請輸入路線搜尋 --</option>
+            </select>
+            <div class="add-row">
+                <button id="addBtn" class="btn btn-add" disabled>➕ 加入關注</button>
+                <button id="quickAddBtn" class="btn btn-quick" disabled>📍 最近站</button>
+                <button id="locateBtn" class="btn btn-locate">📡 定位</button>
+            </div>
+            <div class="quick-hint" id="quickHint">📍 點擊「定位」啟用 GPS，以使用最近站功能</div>
+        </div>
+        <div class="monitor-header">
+            <span class="title">📋 關注路線</span>
+            <div class="actions">
+                <button id="sortBtn">🔀 排序</button>
+                <button id="exportBtn">📤 匯出</button>
+                <button id="importBtn">📥 匯入</button>
+                <button id="clearBtn" style="color:#c92a2a;">🗑️ 清空</button>
+            </div>
+        </div>
+        <div id="busList">
+            <div class="empty-message">清單空空如也，快加入路線吧！</div>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // ========== 配置 ==========
+            const CONFIG = {
+                API: {
+                    KMB: 'https://data.etabus.gov.hk/v1/transport/kmb',
+                    CTB: 'https://rt.data.gov.hk/v1/transport/citybus-nwfb',
+                    NLB: 'https://rt.data.gov.hk/v2/transport/nlb'
+                },
+                GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
+                UI: {
+                    refreshInterval: 30000,
+                    debounceDelay: 600,
+                    walkSpeedMpm: 75,
+                    maxETAShow: 3,
+                    nearestDistanceThreshold: 2000, // 放宽至2公里
+                    maxConcurrentRequests: 5
+                },
+                CACHE: {
+                    stopTTL: 86400000,
+                    routeTTL: 86400000
+                },
+                RETRY: { maxAttempts: 2, delayMs: 800 }
+            };
+
+            // ========== 工具函數 ==========
+            const Utils = {
+                safeJSONParse(str, fallback = null) { try { return JSON.parse(str); } catch { return fallback; } },
+                calcDistance(lat1, lon1, lat2, lon2) {
+                    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+                    const R = 6371e3;
+                    const dLat = (lat2 - lat1) * Math.PI / 180;
+                    const dLon = (lon2 - lon1) * Math.PI / 180;
+                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+                    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                },
+                formatTime(d) { return d.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); },
+                debounce(fn, delay) { let timer = null; return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), delay); }; },
+                sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
+                getNLBStopName(stop, index) {
+                    const candidates = ['stopName_tc', 'stopName_en', 'name_tc', 'stop_name_tc', 'stopName', 'name', 'stop_name', 'stopNameZh', 'nameZh', 'stopName_zh', 'stop_name_zh', 'stopNameTC', 'stopName_Tc'];
+                    for (const key of candidates)
+                        if (stop[key] && typeof stop[key] === 'string' && stop[key].trim() !== '') return stop[key].trim();
+                    for (const key in stop)
+                        if (typeof stop[key] === 'string' && stop[key].trim() !== '' && !/^\d+$/.test(stop[key]) && stop[key].length > 1) return stop[key].trim();
+                    return `第 ${index+1} 站`;
+                },
+                async parallelLimit(tasks, limit) {
+                    const results = [];
+                    const executing = [];
+                    for (const task of tasks) {
+                        const p = task().then(result => { results.push(result); }).catch(err => { results.push({ error: err }); });
+                        executing.push(p);
+                        if (executing.length >= limit) {
+                            await Promise.race(executing);
+                            for (let i = executing.length - 1; i >= 0; i--) {
+                                if (executing[i].isSettled) { executing.splice(i, 1); }
+                            }
+                        }
+                    }
+                    await Promise.all(executing);
+                    return results;
+                }
+            };
+            Promise.prototype.isSettled = false;
+            const origThen = Promise.prototype.then;
+            Promise.prototype.then = function(onFulfilled, onRejected) {
+                const p = origThen.call(this, onFulfilled, onRejected);
+                p.isSettled = true;
+                return p;
+            };
+            Promise.prototype.catch = function(onRejected) {
+                const p = origThen.call(this, undefined, onRejected);
+                p.isSettled = true;
+                return p;
+            };
+
+            // ========== 快取類 ==========
+            class Cache {
+                constructor(ttl, storageKey = null) {
+                    this.ttl = ttl;
+                    this.store = new Map();
+                    this.storageKey = storageKey;
+                    if (storageKey) {
+                        try {
+                            const saved = localStorage.getItem(storageKey);
+                            if (saved) {
+                                const data = JSON.parse(saved);
+                                for (const [key, val] of Object.entries(data)) {
+                                    this.store.set(key, { value: val.value, timestamp: val.timestamp });
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+                get(key) {
+                    const entry = this.store.get(key);
+                    if (!entry) return null;
+                    if (Date.now() - entry.timestamp > this.ttl) {
+                        this.store.delete(key);
+                        if (this.storageKey) this._persist();
+                        return null;
+                    }
+                    return entry.value;
+                }
+                set(key, value) {
+                    this.store.set(key, { value, timestamp: Date.now() });
+                    if (this.storageKey) this._persist();
+                }
+                clear() { this.store.clear(); if (this.storageKey) { localStorage.removeItem(this.storageKey); } }
+                _persist() {
+                    if (!this.storageKey) return;
+                    try {
+                        const obj = {};
+                        for (const [key, entry] of this.store) {
+                            obj[key] = { value: entry.value, timestamp: entry.timestamp };
+                        }
+                        localStorage.setItem(this.storageKey, JSON.stringify(obj));
+                    } catch (e) {}
+                }
+            }
+
+            const stopCache = new Cache(CONFIG.CACHE.stopTTL, 'bus_stop_cache');
+            const routeCache = new Cache(CONFIG.CACHE.routeTTL, 'bus_route_cache');
+
+            // ========== 資料獲取器 ==========
+            class Fetcher {
+                static async fetchJSON(url, options = {}) {
+                    const { maxAttempts = CONFIG.RETRY.maxAttempts, delayMs = CONFIG.RETRY.delayMs } = options;
+                    let lastError;
+                    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                        try {
+                            const res = await fetch(url);
+                            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+                            return await res.json();
+                        } catch (e) {
+                            lastError = e;
+                            if (attempt < maxAttempts) await Utils.sleep(delayMs * attempt);
+                        }
+                    }
+                    throw new Error(`請求失敗 (重試 ${maxAttempts} 次): ${lastError?.message||'未知錯誤'}`);
+                }
+            }
+
+            // ========== 巴士 API（含修复） ==========
+            class BusAPI {
+                static async getStops(company, route, direction = null) {
+                    const cacheKey = `${company}:${route}:${direction||'all'}`;
+                    const cached = routeCache.get(cacheKey);
+                    if (cached) return cached;
+                    let stops = [];
+                    try {
+                        if (company === 'KMB') stops = await this._fetchKMBStops(route, direction);
+                        else if (company === 'CTB') stops = await this._fetchCTBStops(route, direction);
+                        else if (company === 'NLB') stops = await this._fetchNLBStops(route);
+                    } catch (e) {
+                        console.error('獲取車站失敗:', e);
+                        throw e;
+                    }
+                    const normalized = stops.map(s => ({
+                        stopId: s.stopId,
+                        seq: s.seq,
+                        direction: s.direction || 'outbound',
+                        stopName: s.stopName || '未知站',
+                        lat: s.lat || 0,
+                        lng: s.lng || 0,
+                        serviceType: s.serviceType || 1,
+                        routeId: s.routeId || null,
+                        company,
+                        route
+                    }));
+                    routeCache.set(cacheKey, normalized);
+                    return normalized;
+                }
+
+                static async _fetchKMBStops(route, direction) {
+                    const dirs = direction ? [direction] : ['outbound', 'inbound'];
+                    let all = [];
+                    for (const dir of dirs) {
+                        const url = `${CONFIG.API.KMB}/route-stop/${route}/${dir}/1`;
+                        const json = await Fetcher.fetchJSON(url);
+                        const data = json.data || [];
+                        for (const item of data) {
+                            const stopId = item.stop;
+                            const stopInfo = await this._getKMBStopDetail(stopId);
+                            all.push({
+                                stopId,
+                                seq: parseInt(item.seq, 10) || 0,
+                                direction: dir,
+                                serviceType: item.service_type || 1,
+                                stopName: stopInfo.name_tc || '九巴車站',
+                                lat: parseFloat(stopInfo.lat) || 0,
+                                lng: parseFloat(stopInfo.long) || 0
+                            });
+                        }
+                    }
+                    return all;
+                }
+                static async _getKMBStopDetail(stopId) {
+                    const cacheKey = `KMB:stop:${stopId}`;
+                    const cached = stopCache.get(cacheKey);
+                    if (cached) return cached;
+                    const url = `${CONFIG.API.KMB}/stop/${stopId}`;
+                    const json = await Fetcher.fetchJSON(url);
+                    const data = json.data || {};
+                    stopCache.set(cacheKey, data);
+                    return data;
+                }
+
+                static async _fetchCTBStops(route, direction) {
+                    const dirs = direction ? [direction] : ['outbound', 'inbound'];
+                    let all = [];
+                    for (const dir of dirs) {
+                        const url = `${CONFIG.API.CTB}/route-stop/CTB/${route}/${dir}`;
+                        const json = await Fetcher.fetchJSON(url);
+                        const data = json.data || [];
+                        for (const item of data) {
+                            const stopId = item.stop;
+                            const stopInfo = await this._getCTBStopDetail(stopId);
+                            all.push({
+                                stopId,
+                                seq: parseInt(item.seq, 10) || 0,
+                                direction: dir,
+                                stopName: stopInfo.name_tc || '城巴車站',
+                                lat: parseFloat(stopInfo.lat) || 0,
+                                lng: parseFloat(stopInfo.long) || 0
+                            });
+                        }
+                    }
+                    return all;
+                }
+                static async _getCTBStopDetail(stopId) {
+                    const cacheKey = `CTB:stop:${stopId}`;
+                    const cached = stopCache.get(cacheKey);
+                    if (cached) return cached;
+                    const url = `${CONFIG.API.CTB}/stop/${stopId}`;
+                    const json = await Fetcher.fetchJSON(url);
+                    const data = json.data || {};
+                    stopCache.set(cacheKey, data);
+                    return data;
+                }
+
+                // ★ 修复：获取所有关联 routeId 的站点（去程/回程/特别班次）
+                static async _fetchNLBStops(route) {
+                    const listUrl = `${CONFIG.API.NLB}/route.php?action=list`;
+                    const listJson = await Fetcher.fetchJSON(listUrl);
+                    const routes = listJson.routes || [];
+                    const matchedRoutes = routes.filter(r => r.routeNo.toUpperCase() === route.toUpperCase());
+                    if (matchedRoutes.length === 0) throw new Error(`找不到嶼巴路線 ${route}`);
+                    let allStops = [];
+                    for (const rItem of matchedRoutes) {
+                        const routeId = rItem.routeId;
+                        // 根据官方字段判断方向，若不存在则默认为 outbound
+                        const direction = (rItem.direction && rItem.direction.includes('Inbound')) ? 'inbound' : 'outbound';
+                        const stopUrl = `${CONFIG.API.NLB}/stop.php?action=list&routeId=${routeId}`;
+                        const stopJson = await Fetcher.fetchJSON(stopUrl);
+                        const stops = stopJson.stops || [];
+                        stops.forEach((s, idx) => {
+                            allStops.push({
+                                stopId: s.stopId,
+                                seq: idx + 1,
+                                direction: direction,
+                                stopName: Utils.getNLBStopName(s, idx),
+                                lat: parseFloat(s.latitude) || 0,
+                                lng: parseFloat(s.longitude) || 0,
+                                routeId: routeId
+                            });
+                        });
+                    }
+                    return allStops;
+                }
+
+                static async getETA(watchItem) {
+                    const { company, route, stopId, serviceType, direction, seq, routeId } = watchItem;
+                    let url = '';
+                    if (company === 'KMB') url = `${CONFIG.API.KMB}/eta/${stopId}/${route}/${serviceType||1}`;
+                    else if (company === 'CTB') url = `${CONFIG.API.CTB}/eta/CTB/${stopId}/${route}`;
+                    else if (company === 'NLB') {
+                        if (!routeId) {
+                            const cached = routeCache.get(`NLB:${route}:all`);
+                            if (cached && cached.length > 0) {
+                                const found = cached.find(s => s.stopId === stopId);
+                                if (found && found.routeId) { watchItem.routeId = found.routeId; }
+                            }
+                            if (!watchItem.routeId) {
+                                const stops = await this.getStops('NLB', route);
+                                const found = stops.find(s => s.stopId === stopId);
+                                if (found && found.routeId) { watchItem.routeId = found.routeId; }
+                                else { throw new Error('無法取得 NLB 路線 ID'); }
+                            }
+                        }
+                        url = `${CONFIG.API.NLB}/stop.php?action=estimatedArrivals&routeId=${watchItem.routeId}&stopId=${stopId}&language=zh`;
+                    } else throw new Error('不支援的巴士公司');
+                    const json = await Fetcher.fetchJSON(url);
+                    return this._parseETA(company, json, watchItem);
+                }
+                static _parseETA(company, json, watchItem) {
+                    const { direction, seq } = watchItem;
+                    let arrivals = [];
+                    if (company === 'KMB' || company === 'CTB') {
+                        const data = json.data || [];
+                        let filtered = data.filter(item => {
+                            const dirMatch = item.dir === (direction === 'outbound' ? 'O' : 'I');
+                            const seqMatch = item.seq == seq;
+                            return dirMatch && seqMatch;
+                        });
+                        if (filtered.length === 0) filtered = data;
+                        filtered.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+                        arrivals = filtered.slice(0, CONFIG.UI.maxETAShow).map(item => {
+                            const etaDate = new Date(item.eta);
+                            const mins = Math.floor((etaDate - Date.now()) / 60000);
+                            return { eta: etaDate, mins: mins < 0 ? 0 : mins, dest_tc: item.dest_tc || '目的地', remark: item.remark_tc || '' };
+                        });
+                    } else if (company === 'NLB') {
+                        const data = json.estimatedArrivals || [];
+                        arrivals = data.slice(0, CONFIG.UI.maxETAShow).map(item => {
+                            let mins = parseInt(item.estimatedArrivalMinutes);
+                            if (isNaN(mins) || mins < 0) {
+                                const etaTime = new Date(item.estimatedArrivalTime);
+                                if (!isNaN(etaTime)) { mins = Math.floor((etaTime - Date.now()) / 60000); if (mins < 0) mins = 0; } else mins = -1;
+                            }
+                            return {
+                                eta: item.estimatedArrivalTime ? new Date(item.estimatedArrivalTime) : null,
+                                mins,
+                                dest_tc: item.destinationName_tc || item.destinationName || '目的地',
+                                remark: item.remark_tc || ''
+                            };
+                        });
+                    }
+                    return arrivals;
+                }
+            }
+
+            // ========== GPS 管理器（完整修复版） ==========
+            class GPSManager {
+                constructor() {
+                    this.lat = null;
+                    this.lng = null;
+                    this.accuracy = null;
+                    this.watchId = null;
+                    this.statusCallback = null;
+                    this._listeners = [];
+                    this._isLocating = false;
+                    this._lastError = null;
+                }
+
+                start(callback) {
+                    this.statusCallback = callback;
+                    if (!navigator.geolocation) {
+                        this._updateStatus('⚠️ 此裝置不支援 GPS 定位', false);
+                        return;
+                    }
+                    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                        this._updateStatus('⚠️ GPS 需在 HTTPS 安全連線下運作', false);
+                        return;
+                    }
+                    // 使用 Permissions API 检查状态，避免强行弹窗
+                    if (navigator.permissions && navigator.permissions.query) {
+                        navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+                            if (result.state === 'granted') {
+                                this._requestLocation(false);
+                            } else if (result.state === 'prompt') {
+                                this._updateStatus('📍 請點擊「定位」按鈕啟用 GPS', null);
+                            } else {
+                                this._updateStatus('⚠️ 定位權限已被拒絕，請至瀏覽器設定開啟', false);
+                            }
+                        }).catch(() => {
+                            this._updateStatus('📍 點擊「定位」以啟用 GPS 服務', null);
+                        });
+                    } else {
+                        this._updateStatus('📍 點擊「定位」以啟用 GPS 服務', null);
+                    }
+                }
+
+                // 用户手势触发
+                requestLocation() {
+                    if (this._isLocating) return;
+                    this._requestLocation(true);
+                }
+
+                _requestLocation(forcePrompt) {
+                    this._isLocating = true;
+                    this._updateStatus('⏳ 正在獲取精確位置...', null);
+
+                    if (this.watchId) {
+                        navigator.geolocation.clearWatch(this.watchId);
+                        this.watchId = null;
+                    }
+
+                    const geoOptions = {
+                        enableHighAccuracy: CONFIG.GPS.enableHighAccuracy,
+                        timeout: CONFIG.GPS.timeout,
+                        maximumAge: CONFIG.GPS.maximumAge
+                    };
+
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            this.lat = pos.coords.latitude;
+                            this.lng = pos.coords.longitude;
+                            this.accuracy = pos.coords.accuracy;
+                            this._lastError = null;
+                            this._isLocating = false;
+                            this._updateStatus(`📡 定位成功 (精確度 ${Math.round(this.accuracy)}m)`, true);
+                            this._notifyListeners();
+                            this._startWatch();
+                        },
+                        (err) => {
+                            this._isLocating = false;
+                            this._lastError = err;
+                            let msg = '⚠️ 定位失敗';
+                            if (err.code === 1) {
+                                msg = '⚠️ 定位權限被拒。請到手機「設定」>「瀏覽器」允許位置權限。';
+                            } else if (err.code === 2) {
+                                msg = '⚠️ 搜尋不到 GPS 訊號，請移步到接近窗邊或室外空間。';
+                            } else if (err.code === 3) {
+                                msg = '⏳ 定位逾時，手機 GPS 響應過慢，請再點擊一次。';
+                            }
+                            this._updateStatus(msg, false);
+                        },
+                        geoOptions
+                    );
+                }
+
+                _startWatch() {
+                    if (this.watchId) navigator.geolocation.clearWatch(this.watchId);
+                    this.watchId = navigator.geolocation.watchPosition(
+                        (pos) => {
+                            this.lat = pos.coords.latitude;
+                            this.lng = pos.coords.longitude;
+                            this.accuracy = pos.coords.accuracy;
+                            this._updateStatus(`📡 實時定位中 (誤差 ${Math.round(this.accuracy)}m)`, true);
+                            this._notifyListeners();
+                        },
+                        null,
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+                    );
+                }
+
+                stop() {
+                    if (this.watchId) {
+                        navigator.geolocation.clearWatch(this.watchId);
+                        this.watchId = null;
+                    }
+                    this._isLocating = false;
+                }
+
+                _updateStatus(text, ok) {
+                    if (this.statusCallback) {
+                        let color = '#6c757d';
+                        if (ok === true) color = '#2b8a3e';
+                        else if (ok === false) color = '#c92a2a';
+                        this.statusCallback(text, ok);
+                    }
+                }
+
+                _notifyListeners() {
+                    for (const fn of this._listeners)
+                        try { fn(this.lat, this.lng); } catch (e) {}
+                }
+
+                onPositionUpdate(fn) {
+                    this._listeners.push(fn);
+                    if (this.lat !== null && this.lng !== null) fn(this.lat, this.lng);
+                }
+
+                getDistance(lat, lng) {
+                    if (this.lat === null || this.lng === null) return Infinity;
+                    return Utils.calcDistance(this.lat, this.lng, lat, lng);
+                }
+
+                isReady() {
+                    return this.lat !== null && this.lng !== null;
+                }
+
+                getStatusText() {
+                    if (this.lat !== null && this.lng !== null) return '已定位';
+                    if (this._lastError && this._lastError.code === 1) return '權限被拒絕';
+                    if (this._isLocating) return '定位中...';
+                    return '未定位';
+                }
+            }
+
+            // ========== 關注清單 ==========
+            class WatchList {
+                constructor() { this.items = []; this.load(); }
+                load() {
+                    const raw = localStorage.getItem('watchedBusRoutes');
+                    if (raw) { try { this.items = JSON.parse(raw); } catch (e) { this.items = []; } } else { this.items = []; }
+                    this.save();
+                }
+                save() { localStorage.setItem('watchedBusRoutes', JSON.stringify(this.items)); }
+                add(item) {
+                    const exists = this.items.some(b => b.company === item.company && b.route === item.route && b.stopId === item.stopId && b.direction === item.direction);
+                    if (exists) return false;
+                    if (item.company === 'NLB' && !item.routeId) {
+                        const cached = routeCache.get(`NLB:${item.route}:all`);
+                        if (cached && cached.length > 0) {
+                            const found = cached.find(s => s.stopId === item.stopId);
+                            if (found && found.routeId) item.routeId = found.routeId;
+                        }
+                        if (!item.routeId) { throw new Error('NLB 路線缺少 routeId，請重新搜尋'); }
+                    }
+                    this.items.push(item);
+                    this.save();
+                    return true;
+                }
+                remove(index) { if (index >= 0 && index < this.items.length) { this.items.splice(index, 1); this.save(); return true; } return false; }
+                clear() { this.items = []; this.save(); }
+                sortBy(field) {
+                    const order = (field === 'route') ? (a, b) => a.route.localeCompare(b.route) :
+                        (field === 'eta') ? (a, b) => (a._etaMins || 999) - (b._etaMins || 999) :
+                        (a, b) => (a[field] || '').localeCompare(b[field] || '');
+                    this.items.sort(order);
+                    this.save();
+                }
+                exportData() { return JSON.stringify(this.items, null, 2); }
+                importData(json) { try { const data = JSON.parse(json); if (Array.isArray(data)) { this.items = data; this.save(); return true; } } catch (e) {} return false; }
+            }
+
+            // ========== 主要 UI 控制器 ==========
+            class UIController {
+                constructor() {
+                    this.elements = {
+                        companySelect: document.getElementById('companySelect'),
+                        routeInput: document.getElementById('routeInput'),
+                        stationSelect: document.getElementById('stationSelect'),
+                        addBtn: document.getElementById('addBtn'),
+                        quickAddBtn: document.getElementById('quickAddBtn'),
+                        locateBtn: document.getElementById('locateBtn'),
+                        busList: document.getElementById('busList'),
+                        refreshTime: document.getElementById('refreshTime'),
+                        gpsStatus: document.getElementById('gpsStatus'),
+                        expandOut: document.getElementById('expandOutBtn'),
+                        expandIn: document.getElementById('expandInBtn'),
+                        sortBtn: document.getElementById('sortBtn'),
+                        exportBtn: document.getElementById('exportBtn'),
+                        importBtn: document.getElementById('importBtn'),
+                        clearBtn: document.getElementById('clearBtn'),
+                        toast: document.getElementById('toast'),
+                        quickHint: document.getElementById('quickHint')
+                    };
+                    this.gps = new GPSManager();
+                    this.watchList = new WatchList();
+                    this.currentStops = [];
+                    this._isFetching = false;
+                    this._toastTimeout = null;
+                    this._bindEvents();
+                    // 启动 GPS（自动检查权限，不弹窗）
+                    this.gps.start((text, ok) => {
+                        this.elements.gpsStatus.textContent = text;
+                        this.elements.gpsStatus.style.color = ok === true ? '#2b8a3e' : ok === false ? '#c92a2a' : '#f59f00';
+                        this._updateHint();
+                        this._updateQuickButtonState();
+                        this._updateLocateButtonState();
+                    });
+                    this.gps.onPositionUpdate(Utils.debounce(() => {
+                        this._updateDistanceInSelect();
+                        this._updateQuickButtonState();
+                        this._updateHint();
+                        this._updateLocateButtonState();
+                        this.fetchETA();
+                    }, 1000));
+                    this.fetchETA();
+                    setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
+                }
+
+                _bindEvents() {
+                    const searchHandler = Utils.debounce(() => this._onSearchInput(), CONFIG.UI.debounceDelay);
+                    this.elements.companySelect.addEventListener('change', searchHandler);
+                    this.elements.routeInput.addEventListener('input', searchHandler);
+                    this.elements.expandOut.addEventListener('click', () => this._expandDirection('outbound'));
+                    this.elements.expandIn.addEventListener('click', () => this._expandDirection('inbound'));
+                    this.elements.addBtn.addEventListener('click', () => this._addToWatchList());
+                    this.elements.quickAddBtn.addEventListener('click', () => this._quickAddNearest());
+                    this.elements.locateBtn.addEventListener('click', () => this._handleLocate());
+                    this.elements.sortBtn.addEventListener('click', () => { this.watchList.sortBy('route'); this.fetchETA(); this.showToast('已按路線排序'); });
+                    this.elements.exportBtn.addEventListener('click', () => {
+                        const data = this.watchList.exportData();
+                        const blob = new Blob([data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `bus_watchlist_${new Date().toISOString().slice(0,10)}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this.showToast('匯出成功');
+                    });
+                    this.elements.importBtn.addEventListener('click', () => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'application/json';
+                        input.onchange = (e) => {
+                            const file = e.target.files[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                                const result = this.watchList.importData(ev.target.result);
+                                if (result) { this.fetchETA(); this.showToast('匯入成功'); } else this.showToast('匯入失敗，格式錯誤');
+                            };
+                            reader.readAsText(file);
+                        };
+                        input.click();
+                    });
+                    this.elements.clearBtn.addEventListener('click', () => {
+                        if (confirm('確定要清空所有關注路線嗎？')) { this.watchList.clear(); this.fetchETA(); this.showToast('已清空'); }
+                    });
+                    this.elements.stationSelect.addEventListener('change', () => this._updateAddButton());
+                    this.elements.quickHint.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('hint-btn')) {
+                            this._handleLocate();
+                        } else if (!this.gps.isReady()) {
+                            this._handleLocate();
+                        }
+                    });
+                }
+
+                _handleLocate() {
+                    const btn = this.elements.locateBtn;
+                    btn.disabled = true;
+                    btn.classList.add('locating');
+                    btn.textContent = '⏳ 定位中';
+                    this.gps.requestLocation();
+                    setTimeout(() => {
+                        btn.classList.remove('locating');
+                        if (this.gps.isReady()) {
+                            btn.textContent = '📡 已定位';
+                            btn.style.background = '#2b8a3e';
+                        } else {
+                            btn.textContent = '📡 定位';
+                            btn.style.background = '#e67700';
+                        }
+                        btn.disabled = false;
+                        this._updateLocateButtonState();
+                    }, 5000);
+                }
+
+                _updateLocateButtonState() {
+                    const btn = this.elements.locateBtn;
+                    if (this.gps.isReady()) {
+                        btn.textContent = '📡 已定位';
+                        btn.style.background = '#2b8a3e';
+                        btn.disabled = false;
+                        btn.classList.remove('locating');
+                    } else {
+                        btn.textContent = '📡 定位';
+                        btn.style.background = '#e67700';
+                        btn.disabled = false;
+                        btn.classList.remove('locating');
+                    }
+                }
+
+                _updateHint() {
+                    const hint = this.elements.quickHint;
+                    if (this.gps.isReady()) {
+                        hint.textContent = '📍 GPS 已就緒，可使用「最近站」快速加入';
+                        hint.className = 'quick-hint active';
+                    } else {
+                        const status = this.gps.getStatusText();
+                        if (status === '權限被拒絕') {
+                            hint.innerHTML = '⚠️ 定位權限被拒絕，請點擊 <button class="hint-btn">📡 定位</button> 並允許權限，或至瀏覽器設定開啟';
+                            hint.className = 'quick-hint error';
+                        } else if (status === '定位中...') {
+                            hint.textContent = '⏳ 正在獲取位置，請稍候...';
+                            hint.className = 'quick-hint';
+                        } else {
+                            hint.innerHTML = '📍 點擊 <button class="hint-btn">📡 定位</button> 啟用 GPS，以使用最近站功能';
+                            hint.className = 'quick-hint';
+                        }
+                    }
+                }
+
+                _onSearchInput() {
+                    const route = this.elements.routeInput.value.trim().toUpperCase();
+                    if (!route) { this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); return; }
+                    this.elements.stationSelect.innerHTML = '<option value="">⏳ 搜尋中...</option>';
+                    this._searchStations(route);
+                }
+                async _searchStations(route) {
+                    const company = this.elements.companySelect.value;
+                    try {
+                        const stops = await BusAPI.getStops(company, route);
+                        this.currentStops = stops;
+                        this._populateStationSelect(stops, null);
+                    } catch (e) {
+                        console.error('搜尋失敗:', e);
+                        this.elements.stationSelect.innerHTML = `<option value="">❌ 搜尋失敗: ${e.message||'請稍後重試'}</option>`;
+                        this._updateAddButton();
+                        this._updateQuickButtonState();
+                    }
+                }
+
+                _populateStationSelect(stops, directionFilter = null) {
+                    const select = this.elements.stationSelect;
+                    select.innerHTML = '';
+                    if (!stops || stops.length === 0) {
+                        select.innerHTML = '<option value="">⚠️ 此路線無車站</option>';
+                        this._updateAddButton();
+                        this._updateQuickButtonState();
+                        return;
+                    }
+
+                    const company = stops[0].company;
+                    let outbound = [], inbound = [];
+
+                    // 对 NLB 特别处理，因为我们已经从多个 routeId 获取了站点，需要区分方向
+                    if (company === 'NLB') {
+                        outbound = stops.filter(s => s.direction === 'outbound');
+                        inbound = stops.filter(s => s.direction === 'inbound');
+                        outbound.sort((a, b) => a.seq - b.seq);
+                        inbound.sort((a, b) => a.seq - b.seq);
+                        // 如果 inbound 为空，说明原始数据可能只有单向，则用反向排序伪造（但这种情况很少）
+                        if (inbound.length === 0 && outbound.length > 0) {
+                            inbound = outbound.map(s => ({ ...s, direction: 'inbound', seq: outbound.length - s.seq + 1 })).reverse();
+                        }
+                    } else {
+                        outbound = stops.filter(s => s.direction === 'outbound');
+                        inbound = stops.filter(s => s.direction === 'inbound');
+                        outbound.sort((a, b) => a.seq - b.seq);
+                        inbound.sort((a, b) => a.seq - b.seq);
+                    }
+
+                    const getDist = (s) => this.gps.getDistance(s.lat, s.lng);
+
+                    const addOption = (s, prefix = '', displaySeq = null) => {
+                        const opt = document.createElement('option');
+                        const dist = getDist(s);
+                        const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
+                        const seq = displaySeq !== null ? displaySeq : s.seq;
+                        const label = `${prefix}第 ${seq} 站: ${s.stopName} (${distText})`;
+                        opt.textContent = label;
+                        opt.value = JSON.stringify({
+                            company: s.company,
+                            route: s.route,
+                            stopId: s.stopId,
+                            stopName: s.stopName,
+                            direction: s.direction,
+                            seq: s.seq,
+                            serviceType: s.serviceType || 1,
+                            lat: s.lat,
+                            lng: s.lng,
+                            routeId: s.routeId || null
+                        });
+                        select.appendChild(opt);
+                    };
+
+                    const showOut = (directionFilter === null || directionFilter === 'outbound');
+                    const showIn = (directionFilter === null || directionFilter === 'inbound');
+
+                    if (showOut && outbound.length > 0) {
+                        const hdr = document.createElement('option');
+                        hdr.disabled = true;
+                        hdr.style.fontWeight = 'bold';
+                        hdr.textContent = '🟢 正向 (去程)';
+                        select.appendChild(hdr);
+                        let nearestDist = Infinity, nearestIdx = -1;
+                        for (let i = 0; i < outbound.length; i++) {
+                            const d = getDist(outbound[i]);
+                            if (isFinite(d) && d < CONFIG.UI.nearestDistanceThreshold && d < nearestDist) {
+                                nearestDist = d;
+                                nearestIdx = i;
+                            }
+                        }
+                        outbound.forEach((s, idx) => {
+                            let prefix = '';
+                            if (idx === nearestIdx && nearestIdx !== -1) prefix = '📍 [最近] ';
+                            addOption(s, prefix, s.seq);
+                        });
+                        if (showIn && inbound.length > 0) {
+                            const sep = document.createElement('option');
+                            sep.disabled = true;
+                            sep.textContent = '─────────────────';
+                            select.appendChild(sep);
+                        }
+                    }
+
+                    if (showIn && inbound.length > 0) {
+                        const hdr = document.createElement('option');
+                        hdr.disabled = true;
+                        hdr.style.fontWeight = 'bold';
+                        hdr.textContent = '🔵 反向 (回程)';
+                        select.appendChild(hdr);
+                        let nearestDist = Infinity, nearestIdx = -1;
+                        for (let i = 0; i < inbound.length; i++) {
+                            const d = getDist(inbound[i]);
+                            if (isFinite(d) && d < CONFIG.UI.nearestDistanceThreshold && d < nearestDist) {
+                                nearestDist = d;
+                                nearestIdx = i;
+                            }
+                        }
+                        inbound.forEach((s, idx) => {
+                            let prefix = '';
+                            if (idx === nearestIdx && nearestIdx !== -1) prefix = '📍 [最近] ';
+                            addOption(s, prefix, idx + 1);
+                        });
+                    }
+
+                    if ((showOut && outbound.length === 0) && (showIn && inbound.length === 0)) {
+                        select.innerHTML = '<option value="">⚠️ 無任何站點</option>';
+                    }
+                    this._updateAddButton();
+                    this._updateQuickButtonState();
+                }
+
+                async _expandDirection(direction) {
+                    const route = this.elements.routeInput.value.trim().toUpperCase();
+                    if (!route) { this.showToast('請先輸入路線號碼'); return; }
+                    const company = this.elements.companySelect.value;
+                    this.elements.stationSelect.innerHTML = `<option value="">⏳ 展開 ${direction==='outbound'?'正向':'反向'} 站...</option>`;
+                    try {
+                        const stops = await BusAPI.getStops(company, route);
+                        this.currentStops = stops;
+                        this._populateStationSelect(stops, direction);
+                        this.showToast(`已展開 ${direction==='outbound'?'正向':'反向'} 站點`);
+                    } catch (e) {
+                        this.elements.stationSelect.innerHTML = `<option value="">❌ 無法展開: ${e.message||'請重試'}</option>`;
+                        this._updateAddButton();
+                        this._updateQuickButtonState();
+                    }
+                }
+
+                _addToWatchList() {
+                    const select = this.elements.stationSelect;
+                    const value = select.value;
+                    if (!value) return;
+                    try {
+                        const item = JSON.parse(value);
+                        if (!item.company || !item.route || !item.stopId) { this.showToast('資料不完整，請重新選擇'); return; }
+                        if (this.watchList.add(item)) {
+                            this.showToast(`已加入 ${item.route}  ${item.stopName}`);
+                            this.elements.routeInput.value = '';
+                            this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>';
+                            this._updateAddButton();
+                            this._updateQuickButtonState();
+                            this.fetchETA();
+                        } else {
+                            this.showToast('此車站已在清單中');
+                        }
+                    } catch (e) { this.showToast('加入失敗: ' + e.message); }
+                }
+
+                _quickAddNearest() {
+                    if (!this.gps.isReady()) {
+                        this.showToast('請先點擊「定位」啟用 GPS');
+                        this._handleLocate();
+                        return;
+                    }
+                    const select = this.elements.stationSelect;
+                    let nearestOption = null;
+                    let minDist = Infinity;
+                    for (let i = 0; i < select.options.length; i++) {
+                        const opt = select.options[i];
+                        const val = opt.value;
+                        if (!val || val.startsWith('--') || val.includes('請輸入') || val.includes('無') || val.includes('找不到') || val.includes('失敗')) continue;
+                        try {
+                            const data = JSON.parse(val);
+                            const dist = this.gps.getDistance(data.lat, data.lng);
+                            if (isFinite(dist) && dist < CONFIG.UI.nearestDistanceThreshold && dist < minDist) {
+                                minDist = dist;
+                                nearestOption = opt;
+                            }
+                        } catch (e) {}
+                    }
+                    if (!nearestOption) {
+                        this.showToast(`目前沒有 ${CONFIG.UI.nearestDistanceThreshold/1000} 公里內的站點`);
+                        return;
+                    }
+                    const item = JSON.parse(nearestOption.value);
+                    if (!item.company || !item.route || !item.stopId) { this.showToast('資料不完整'); return; }
+                    if (this.watchList.add(item)) {
+                        this.showToast(`快速加入 ${item.route}  ${item.stopName}`);
+                        this.elements.routeInput.value = '';
+                        this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>';
+                        this._updateAddButton();
+                        this._updateQuickButtonState();
+                        this.fetchETA();
+                    } else {
+                        this.showToast('此車站已在清單中');
+                    }
+                }
+
+                _updateAddButton() {
+                    const select = this.elements.stationSelect;
+                    const val = select.value;
+                    const disabled = !val || val.startsWith('--') || val.includes('請輸入') || val.includes('無') || val.includes('找不到') || val.includes('失敗') || select.disabled;
+                    this.elements.addBtn.disabled = disabled;
+                    this.elements.addBtn.style.opacity = disabled ? '0.6' : '1';
+                }
+
+                _updateQuickButtonState() {
+                    const select = this.elements.stationSelect;
+                    let hasNearby = false;
+                    if (!this.gps.isReady()) {
+                        this.elements.quickAddBtn.disabled = true;
+                        this.elements.quickAddBtn.title = '請先啟用 GPS 定位';
+                        return;
+                    }
+                    for (let i = 0; i < select.options.length; i++) {
+                        const opt = select.options[i];
+                        const val = opt.value;
+                        if (!val || val.startsWith('--') || val.includes('請輸入') || val.includes('無') || val.includes('找不到') || val.includes('失敗')) continue;
+                        try {
+                            const data = JSON.parse(val);
+                            const dist = this.gps.getDistance(data.lat, data.lng);
+                            if (isFinite(dist) && dist < CONFIG.UI.nearestDistanceThreshold) {
+                                hasNearby = true;
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                    this.elements.quickAddBtn.disabled = !hasNearby;
+                    this.elements.quickAddBtn.title = hasNearby ? '加入最近站點' : '附近無站點';
+                }
+
+                _updateDistanceInSelect() {
+                    const select = this.elements.stationSelect;
+                    const options = select.options;
+                    for (let i = 0; i < options.length; i++) {
+                        const opt = options[i];
+                        const val = opt.value;
+                        if (!val || val.startsWith('--') || val.includes('請輸入') || val.includes('無') || val.includes('找不到') || val.includes('失敗')) continue;
+                        try {
+                            const data = JSON.parse(val);
+                            const dist = this.gps.getDistance(data.lat, data.lng);
+                            const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
+                            const newLabel = opt.text.replace(/\([^)]*\)/g, `(${distText})`);
+                            if (newLabel !== opt.text) opt.textContent = newLabel;
+                        } catch (e) {}
+                    }
+                    this._updateQuickButtonState();
+                }
+
+                async fetchETA() {
+                    if (this._isFetching) return;
+                    this._isFetching = true;
+                    const list = this.watchList.items;
+                    const container = this.elements.busList;
+                    if (list.length === 0) {
+                        container.innerHTML = '<div class="empty-message">清單空空如也，快加入路線吧！</div>';
+                        this.elements.refreshTime.textContent = '🔄 無監控路線';
+                        this._isFetching = false;
+                        return;
+                    }
+
+                    const tasks = list.map((item, index) => async () => {
+                        try {
+                            const arrivals = await BusAPI.getETA(item);
+                            return { index, arrivals, error: null };
+                        } catch (err) {
+                            return { index, arrivals: null, error: err };
+                        }
+                    });
+
+                    const results = await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
+
+                    const fragment = document.createDocumentFragment();
+                    for (let i = 0; i < list.length; i++) {
+                        const item = list[i];
+                        const result = results.find(r => r.index === i);
+                        const arrivals = result?.arrivals || [];
+                        const error = result?.error || null;
+                        const dist = this.gps.getDistance(item.lat, item.lng);
+                        const walkMins = isFinite(dist) ? Math.ceil(dist / CONFIG.UI.walkSpeedMpm) : null;
+                        let etaMins = null, dest = '目的地', etaDisplay = '--', statusHtml = '', extraETAs = [];
+                        if (arrivals && arrivals.length > 0) {
+                            const first = arrivals[0];
+                            etaMins = first.mins;
+                            dest = first.dest_tc || '目的地';
+                            etaDisplay = (etaMins === 0) ? '即將' : (etaMins > 0 ? `${etaMins}分` : '--');
+                            extraETAs = arrivals.slice(1).map(a => a.mins >= 0 ? `${a.mins}分` : '--');
+                            if (walkMins !== null && etaMins !== null && etaMins >= 0) {
+                                if (etaMins >= walkMins + 2) statusHtml = '<span class="status-badge status-ok">✅ 趕得切</span>';
+                                else if (etaMins >= walkMins) statusHtml = '<span class="status-badge status-rush">⚡ 時間緊迫</span>';
+                                else statusHtml = '<span class="status-badge status-late">❌ 趕唔切</span>';
+                            } else {
+                                statusHtml = '<span class="status-badge" style="background:#6c757d;">⏳ 定位中</span>';
+                            }
+                            item._etaMins = etaMins;
+                        } else {
+                            if (error) {
+                                let errMsg = error.message || '未知錯誤';
+                                if (errMsg.includes('HTTP 404')) errMsg = '路線或車站不存在';
+                                else if (errMsg.includes('NetworkError')) errMsg = '網絡連線問題';
+                                else if (errMsg.includes('timeout')) errMsg = '請求逾時';
+                                etaDisplay = '⚠️';
+                                statusHtml = `<span class="status-badge" style="background:#c92a2a;">❌ ${errMsg}</span>`;
+                            } else {
+                                etaDisplay = '--';
+                                statusHtml = '<span class="status-badge" style="background:#6c757d;">暫無</span>';
+                            }
+                            item._etaMins = 999;
+                        }
+                        const walkText = walkMins !== null ? `🚶 ${Math.round(dist)}m (約${walkMins}分)` : '🚶 定位中';
+                        const badgeClass = `badge-${item.company.toLowerCase()}`;
+                        const dirBadge = item.direction === 'outbound' ? 'dir-out' : 'dir-in';
+                        const dirText = item.direction === 'outbound' ? '去程' : '回程';
+                        let etaMultiHtml = `<span class="eta-min">${etaDisplay}</span>`;
+                        if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${extraETAs.join(' · ')}</span>`;
+                        const div = document.createElement('div');
+                        div.className = 'route-item';
+                        div.innerHTML = `
+                            <span class="badge ${badgeClass}">${item.company}</span>
+                            <div class="route-name">${item.route}</div>
+                            <div class="route-info">
+                                <div class="route-dest">往 ${dest} <span class="dir-badge ${dirBadge}">${dirText}</span></div>
+                                <div class="station-name">📍 ${item.stopName}</div>
+                                <div class="walk-info">${walkText}</div>
+                                <div>${statusHtml}</div>
+                            </div>
+                            <div class="route-right">
+                                <div class="eta-multi">${etaMultiHtml}</div>
+                                <button class="del-btn" data-index="${i}">✕</button>
+                            </div>
+                        `;
+                        fragment.appendChild(div);
+                    }
+                    container.innerHTML = '';
+                    container.appendChild(fragment);
+                    this.elements.refreshTime.textContent = `🔄 更新於 ${Utils.formatTime(new Date())}`;
+                    container.querySelectorAll('.del-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const idx = parseInt(e.target.dataset.index);
+                            if (!isNaN(idx)) { this.watchList.remove(idx); this.fetchETA(); this.showToast('已移除'); }
+                        });
+                    });
+                    this._isFetching = false;
+                }
+
+                showToast(msg) {
+                    const el = this.elements.toast;
+                    el.textContent = msg;
+                    el.classList.add('show');
+                    clearTimeout(this._toastTimeout);
+                    this._toastTimeout = setTimeout(() => { el.classList.remove('show'); }, 3000);
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => { const app = new UIController(); window.__app = app; });
+        })();
+    </script>
+</body>
+</html>
