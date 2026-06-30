@@ -715,7 +715,7 @@
                     this.elements.addBtn.addEventListener('click', () => this._addToWatchList());
                     this.elements.quickAddBtn.addEventListener('click', () => this._quickAddNearest());
                     this.elements.locateBtn.addEventListener('click', () => this._handleLocate());
-                    this.elements.sortBtn.addEventListener('click', () => { this.watchList.sortBy('route'); this.fetchETA(); this.showToast('已按路線排序'); });
+                    this.elements.sortBtn.addEventListener('click', () => { this.watchList.sortBy('eta'); this.fetchETA(); this.showToast('已按最早到站排序'); });
                     this.elements.exportBtn.addEventListener('click', () => {
                         const data = this.watchList.exportData();
                         const blob = new Blob([data], { type: 'application/json' });
