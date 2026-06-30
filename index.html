@@ -18,7 +18,8 @@
         .input-row select, .input-row input { padding: 10px 12px; border: 1px solid #ced4da; border-radius: 10px; font-size: 0.95rem; background-color: #fff; transition: border-color 0.2s; }
         .input-row select:focus, .input-row input:focus { border-color: #4dabf7; outline: none; box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25); }
         .input-row select { flex: 0 0 auto; min-width: 80px; font-weight: 600; }
-        .input-row input { flex: 1; min-width: 120px; text-transform: uppercase; }
+        .input-row input { flex: 0 0 auto; min-width: 80px; max-width: 90px; text-transform: uppercase; }
+        .input-row .dir-chip { flex: 1 1 auto; min-width: 50px; }
         .btn-group { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
         .btn-group .btn { flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; min-width: 80px; }
         .btn-group .btn:active { transform: scale(0.97); }
@@ -39,40 +40,46 @@
         .btn-locate:not(:disabled):hover { background: #cc6a00; }
         .btn-locate:disabled { background: #adb5bd; }
         .btn-locate.locating { background: #1c7ed6; animation: pulse 1s infinite; }
+        .dir-chip { padding: 0; border: none; border-radius: 8px; font-weight: 700; font-size: 0.85rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; flex: 0 0 auto; min-width: 78px; text-align: center; line-height: 41px; height: 41px; letter-spacing: 0.5px; }
+        .dir-chip:active { transform: scale(0.95); }
+        .dir-chip.btn-outbound { background: #2b8a3e; }
+        .dir-chip.btn-inbound { background: #1c7ed6; }
+        .dir-chip.btn-outbound:hover { background: #237032; }
+        .dir-chip.btn-inbound:hover { background: #1864ab; }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
         .monitor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
         .monitor-header .title { font-weight: 700; font-size: 1.05rem; color: #212529; }
         .monitor-header .actions { display: flex; gap: 8px; }
         .monitor-header .actions button { background: none; border: 1px solid #dee2e6; border-radius: 20px; padding: 4px 12px; font-size: 0.7rem; color: #495057; cursor: pointer; transition: all 0.15s; }
         .monitor-header .actions button:hover { background: #e9ecef; }
-        #busList { display: flex; flex-direction: column; gap: 10px; }
-        .route-item { display: flex; align-items: center; padding: 12px 10px; background: #f8f9fa; border-radius: 14px; border-left: 4px solid #adb5bd; transition: background 0.1s; position: relative; }
-        .route-item .badge { font-size: 0.65rem; font-weight: 700; padding: 4px 8px; border-radius: 30px; color: #fff; min-width: 42px; text-align: center; letter-spacing: 0.3px; flex-shrink: 0; }
+        #busList { display: flex; flex-direction: column; gap: 5px; }
+        .route-item { display: flex; align-items: center; padding: 4px 6px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #adb5bd; transition: background 0.1s; position: relative; }
+        .route-item .badge { font-size: 0.55rem; font-weight: 700; padding: 1px 5px; border-radius: 16px; color: #fff; min-width: 28px; text-align: center; letter-spacing: 0.15px; flex-shrink: 0; }
         .badge-kmb { background: #d63333; }
         .badge-ctb { background: #f59f00; color: #212529; }
         .badge-nlb { background: #1c7ed6; }
-        .route-name { font-size: 1.2rem; font-weight: 700; margin-left: 8px; min-width: 48px; color: #1a1a2e; }
-        .route-info { flex: 1; margin-left: 10px; min-width: 0; }
-        .route-dest { font-size: 0.9rem; font-weight: 600; color: #212529; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-        .dir-badge { font-size: 0.6rem; padding: 2px 6px; border-radius: 30px; color: #fff; font-weight: 600; background: #6c757d; }
+        .route-name { font-size: 0.85rem; font-weight: 700; margin-left: 4px; min-width: 28px; max-width: 32px; text-align: center; color: #1a1a2e; overflow: hidden; }
+        .route-info { flex: 1; margin-left: 4px; min-width: 0; }
+        .route-dest { font-size: 0.7rem; font-weight: 600; color: #212529; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; line-height: 1.15; }
+        .dir-badge { font-size: 0.5rem; padding: 1px 3px; border-radius: 16px; color: #fff; font-weight: 600; background: #6c757d; }
         .dir-out { background: #2b8a3e; }
         .dir-in { background: #1c7ed6; }
-        .station-name { font-size: 0.75rem; color: #495057; margin-top: 2px; word-break: break-word; }
-        .walk-info { font-size: 0.7rem; color: #6c757d; margin-top: 2px; }
-        .status-badge { display: inline-block; font-size: 0.6rem; font-weight: 700; padding: 2px 8px; border-radius: 30px; color: #fff; margin-top: 4px; }
+        .station-name { font-size: 0.62rem; color: #495057; margin-top: 0px; word-break: break-word; line-height: 1.15; }
+        .walk-info { font-size: 0.58rem; color: #6c757d; margin-top: 0px; line-height: 1.15; }
+        .status-inline { font-size: 0.5rem; font-weight: 700; padding: 0px 4px; border-radius: 16px; color: #fff; line-height: 1.3; white-space: nowrap; flex-shrink: 0; }
         .status-ok { background: #2b8a3e; }
         .status-rush { background: #e67700; }
         .status-late { background: #c92a2a; }
-        .route-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 6px; }
-        .eta-multi { text-align: right; font-weight: 700; font-size: 0.8rem; color: #d63333; min-width: 60px; line-height: 1.3; }
+        .route-right { display: flex; align-items: center; gap: 3px; flex-shrink: 0; margin-left: 3px; }
+        .eta-multi { text-align: right; font-weight: 700; font-size: 0.7rem; color: #d63333; min-width: 40px; line-height: 1.15; }
         .eta-multi .eta-min { display: block; }
-        .eta-multi .eta-min.small { font-size: 0.65rem; color: #6c757d; font-weight: 400; }
-        .del-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #adb5bd; transition: color 0.15s; padding: 0 4px; }
+        .eta-multi .eta-min.small { font-size: 0.55rem; color: #6c757d; font-weight: 400; }
+        .del-btn { background: none; border: none; font-size: 0.9rem; cursor: pointer; color: #adb5bd; transition: color 0.15s; padding: 0 2px; line-height: 1; }
         .del-btn:hover { color: #c92a2a; }
         .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
         .loading-dots::after { content: '...'; animation: dots 1.2s steps(3, end) infinite; }
         @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
-        @media (max-width: 400px) { .input-row select { min-width: 70px; font-size: 0.8rem; } .route-name { font-size: 1rem; min-width: 40px; } .route-dest { font-size: 0.8rem; } .eta-multi { font-size: 0.7rem; min-width: 50px; } .btn-locate { flex: 0.6 !important; min-width: 60px !important; font-size: 0.75rem !important; padding: 10px 4px !important; } }
+        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-name { font-size: 0.8rem; min-width: 24px; max-width: 30px; } .route-dest { font-size: 0.65rem; } .eta-multi { font-size: 0.6rem; min-width: 36px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #212529; color: #fff; padding: 10px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); z-index: 999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; max-width: 90%; }
         .toast.show { opacity: 1; }
         .quick-hint { font-size: 0.7rem; color: #6c757d; margin-top: 4px; text-align: right; min-height: 1.2rem; transition: color 0.3s; cursor: pointer; }
@@ -102,11 +109,9 @@
                     <option value="CTB">城巴</option>
                     <option value="NLB">嶼巴</option>
                 </select>
-                <input type="text" id="routeInput" placeholder="輸入路線 (如 1, 11, 106)" autocomplete="off">
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-outbound" id="expandOutBtn">🟢 正向站</button>
-                <button class="btn btn-inbound" id="expandInBtn">🔵 反向站</button>
+                <input type="text" id="routeInput" placeholder="路線" autocomplete="off">
+                <button class="dir-chip btn-outbound" id="expandOutBtn">🟢 正向</button>
+                <button class="dir-chip btn-inbound" id="expandInBtn">🔵 反向</button>
             </div>
             <select id="stationSelect" class="station-select-box">
                 <option value="">-- 請輸入路線搜尋 --</option>
@@ -183,34 +188,26 @@
                     return `第 ${index+1} 站`;
                 },
                 async parallelLimit(tasks, limit) {
-                    const results = [];
-                    const executing = [];
-                    for (const task of tasks) {
-                        const p = task().then(result => { results.push(result); }).catch(err => { results.push({ error: err }); });
-                        executing.push(p);
-                        if (executing.length >= limit) {
-                            await Promise.race(executing);
-                            for (let i = executing.length - 1; i >= 0; i--) {
-                                if (executing[i].isSettled) { executing.splice(i, 1); }
+                    const results = new Array(tasks.length);
+                    let index = 0;
+                    async function worker() {
+                        while (true) {
+                            const current = index++;
+                            if (current >= tasks.length) break;
+                            try {
+                                results[current] = await tasks[current]();
+                            } catch (err) {
+                                results[current] = { error: err };
                             }
                         }
                     }
-                    await Promise.all(executing);
+                    await Promise.all(
+                        Array.from({ length: Math.min(limit, tasks.length) }, () => worker())
+                    );
                     return results;
                 }
             };
-            Promise.prototype.isSettled = false;
-            const origThen = Promise.prototype.then;
-            Promise.prototype.then = function(onFulfilled, onRejected) {
-                const p = origThen.call(this, onFulfilled, onRejected);
-                p.isSettled = true;
-                return p;
-            };
-            Promise.prototype.catch = function(onRejected) {
-                const p = origThen.call(this, undefined, onRejected);
-                p.isSettled = true;
-                return p;
-            };
+
 
             // ========== 快取類 ==========
             class Cache {
@@ -317,11 +314,15 @@
                         const url = `${CONFIG.API.KMB}/route-stop/${route}/${dir}/1`;
                         const json = await Fetcher.fetchJSON(url);
                         const data = json.data || [];
-                        for (const item of data) {
-                            const stopId = item.stop;
-                            const stopInfo = await this._getKMBStopDetail(stopId);
+                        const stopIds = data.map(item => item.stop);
+                        const details = await Utils.parallelLimit(
+                            stopIds.map(id => () => this._getKMBStopDetail(id)),
+                            5
+                        );
+                        data.forEach((item, i) => {
+                            const stopInfo = details[i] || {};
                             all.push({
-                                stopId,
+                                stopId: item.stop,
                                 seq: parseInt(item.seq, 10) || 0,
                                 direction: dir,
                                 serviceType: item.service_type || 1,
@@ -329,7 +330,7 @@
                                 lat: parseFloat(stopInfo.lat) || 0,
                                 lng: parseFloat(stopInfo.long) || 0
                             });
-                        }
+                        });
                     }
                     return all;
                 }
@@ -351,18 +352,22 @@
                         const url = `${CONFIG.API.CTB}/route-stop/CTB/${route}/${dir}`;
                         const json = await Fetcher.fetchJSON(url);
                         const data = json.data || [];
-                        for (const item of data) {
-                            const stopId = item.stop;
-                            const stopInfo = await this._getCTBStopDetail(stopId);
+                        const stopIds = data.map(item => item.stop);
+                        const details = await Utils.parallelLimit(
+                            stopIds.map(id => () => this._getCTBStopDetail(id)),
+                            5
+                        );
+                        data.forEach((item, i) => {
+                            const stopInfo = details[i] || {};
                             all.push({
-                                stopId,
+                                stopId: item.stop,
                                 seq: parseInt(item.seq, 10) || 0,
                                 direction: dir,
                                 stopName: stopInfo.name_tc || '城巴車站',
                                 lat: parseFloat(stopInfo.lat) || 0,
                                 lng: parseFloat(stopInfo.long) || 0
                             });
-                        }
+                        });
                     }
                     return all;
                 }
@@ -698,7 +703,7 @@
                         this.fetchETA();
                     }, 1000));
                     this.fetchETA();
-                    setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
+                    this._intervalId = setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
                 }
 
                 _bindEvents() {
@@ -748,6 +753,20 @@
                         } else if (!this.gps.isReady()) {
                             this._handleLocate();
                         }
+                    });
+                    this.elements.busList.addEventListener('click', (e) => {
+                        const btn = e.target.closest('.del-btn');
+                        if (!btn) return;
+                        const key = btn.dataset.key;
+                        if (!key) return;
+                        const [company, route, stopId, direction] = key.split('|');
+                        const idx = this.watchList.items.findIndex(it =>
+                            it.company === company &&
+                            it.route === route &&
+                            it.stopId === stopId &&
+                            it.direction === direction
+                        );
+                        if (idx !== -1) { this.watchList.remove(idx); this.fetchETA(); this.showToast('已移除'); }
                     });
                 }
 
@@ -863,7 +882,8 @@
                         const dist = getDist(s);
                         const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
                         const seq = displaySeq !== null ? displaySeq : s.seq;
-                        const label = `${prefix}第 ${seq} 站: ${s.stopName} (${distText})`;
+                        const cleanName = (s.stopName || '').replace(/\s*\([^)]*\)/, '').trim();
+                        const label = `${prefix}第 ${seq} 站: ${cleanName} (${distText})`;
                         opt.textContent = label;
                         opt.value = JSON.stringify({
                             company: s.company,
@@ -1059,7 +1079,7 @@
                             const data = JSON.parse(val);
                             const dist = this.gps.getDistance(data.lat, data.lng);
                             const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
-                            const newLabel = opt.text.replace(/\([^)]*\)/g, `(${distText})`);
+                            const newLabel = opt.text.replace(/\s*\([^)]*\)\s*$/, `(${distText})`);
                             if (newLabel !== opt.text) opt.textContent = newLabel;
                         } catch (e) {}
                     }
@@ -1071,95 +1091,127 @@
                     this._isFetching = true;
                     const list = this.watchList.items;
                     const container = this.elements.busList;
-                    if (list.length === 0) {
-                        container.innerHTML = '<div class="empty-message">清單空空如也，快加入路線吧！</div>';
-                        this.elements.refreshTime.textContent = '🔄 無監控路線';
-                        this._isFetching = false;
-                        return;
-                    }
-
-                    const tasks = list.map((item, index) => async () => {
-                        try {
-                            const arrivals = await BusAPI.getETA(item);
-                            return { index, arrivals, error: null };
-                        } catch (err) {
-                            return { index, arrivals: null, error: err };
+                    try {
+                        if (list.length === 0) {
+                            container.innerHTML = '<div class="empty-message">清單空空如也，快加入路線吧！</div>';
+                            this.elements.refreshTime.textContent = '🔄 無監控路線';
+                            if (this._intervalId) { clearInterval(this._intervalId); this._intervalId = null; }
+                            return;
                         }
-                    });
-
-                    const results = await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
-
-                    const fragment = document.createDocumentFragment();
-                    for (let i = 0; i < list.length; i++) {
-                        const item = list[i];
-                        const result = results.find(r => r.index === i);
-                        const arrivals = result?.arrivals || [];
-                        const error = result?.error || null;
-                        const dist = this.gps.getDistance(item.lat, item.lng);
-                        const walkMins = isFinite(dist) ? Math.ceil(dist / CONFIG.UI.walkSpeedMpm) : null;
-                        let etaMins = null, dest = '目的地', etaDisplay = '--', statusHtml = '', extraETAs = [];
-                        if (arrivals && arrivals.length > 0) {
-                            const first = arrivals[0];
-                            etaMins = first.mins;
-                            dest = first.dest_tc || '目的地';
-                            etaDisplay = (etaMins === 0) ? '即將' : (etaMins > 0 ? `${etaMins}分` : '--');
-                            extraETAs = arrivals.slice(1).map(a => a.mins >= 0 ? `${a.mins}分` : '--');
-                            if (walkMins !== null && etaMins !== null && etaMins >= 0) {
-                                if (etaMins >= walkMins + 2) statusHtml = '<span class="status-badge status-ok">✅ 趕得切</span>';
-                                else if (etaMins >= walkMins) statusHtml = '<span class="status-badge status-rush">⚡ 時間緊迫</span>';
-                                else statusHtml = '<span class="status-badge status-late">❌ 趕唔切</span>';
-                            } else {
-                                statusHtml = '<span class="status-badge" style="background:#6c757d;">⏳ 定位中</span>';
-                            }
-                            item._etaMins = etaMins;
-                        } else {
-                            if (error) {
-                                let errMsg = error.message || '未知錯誤';
-                                if (errMsg.includes('HTTP 404')) errMsg = '路線或車站不存在';
-                                else if (errMsg.includes('NetworkError')) errMsg = '網絡連線問題';
-                                else if (errMsg.includes('timeout')) errMsg = '請求逾時';
-                                etaDisplay = '⚠️';
-                                statusHtml = `<span class="status-badge" style="background:#c92a2a;">❌ ${errMsg}</span>`;
-                            } else {
-                                etaDisplay = '--';
-                                statusHtml = '<span class="status-badge" style="background:#6c757d;">暫無</span>';
-                            }
-                            item._etaMins = 999;
+                        if (!this._intervalId) {
+                            this._intervalId = setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
                         }
-                        const walkText = walkMins !== null ? `🚶 ${Math.round(dist)}m (約${walkMins}分)` : '🚶 定位中';
-                        const badgeClass = `badge-${item.company.toLowerCase()}`;
-                        const dirBadge = item.direction === 'outbound' ? 'dir-out' : 'dir-in';
-                        const dirText = item.direction === 'outbound' ? '去程' : '回程';
-                        let etaMultiHtml = `<span class="eta-min">${etaDisplay}</span>`;
-                        if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${extraETAs.join(' · ')}</span>`;
-                        const div = document.createElement('div');
-                        div.className = 'route-item';
-                        div.innerHTML = `
-                            <span class="badge ${badgeClass}">${item.company}</span>
-                            <div class="route-name">${item.route}</div>
-                            <div class="route-info">
-                                <div class="route-dest">往 ${dest} <span class="dir-badge ${dirBadge}">${dirText}</span></div>
-                                <div class="station-name">📍 ${item.stopName}</div>
-                                <div class="walk-info">${walkText}</div>
-                                <div>${statusHtml}</div>
-                            </div>
-                            <div class="route-right">
-                                <div class="eta-multi">${etaMultiHtml}</div>
-                                <button class="del-btn" data-index="${i}">✕</button>
-                            </div>
-                        `;
-                        fragment.appendChild(div);
-                    }
-                    container.innerHTML = '';
-                    container.appendChild(fragment);
-                    this.elements.refreshTime.textContent = `🔄 更新於 ${Utils.formatTime(new Date())}`;
-                    container.querySelectorAll('.del-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            const idx = parseInt(e.target.dataset.index);
-                            if (!isNaN(idx)) { this.watchList.remove(idx); this.fetchETA(); this.showToast('已移除'); }
+
+                        const tasks = list.map((item, index) => async () => {
+                            try {
+                                const arrivals = await BusAPI.getETA(item);
+                                return { index, arrivals, error: null };
+                            } catch (err) {
+                                return { index, arrivals: null, error: err };
+                            }
                         });
-                    });
-                    this._isFetching = false;
+
+                        const results = await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
+
+                        const keyToItem = new Map();
+                        for (let i = 0; i < list.length; i++) {
+                            keyToItem.set(`${list[i].company}|${list[i].route}|${list[i].stopId}|${list[i].direction}`, { item: list[i], index: i });
+                        }
+
+                        const fragment = document.createDocumentFragment();
+                        for (let i = 0; i < list.length; i++) {
+                            const item = list[i];
+                            const result = results.find(r => r.index === i);
+                            const arrivals = result?.arrivals || [];
+                            const error = result?.error || null;
+                            const dist = this.gps.getDistance(item.lat, item.lng);
+                            const walkMins = isFinite(dist) ? Math.ceil(dist / CONFIG.UI.walkSpeedMpm) : null;
+                            let etaMins = null, dest = '目的地', etaDisplay = '--', statusHtml = '', extraETAs = [];
+                            if (arrivals && arrivals.length > 0) {
+                                const first = arrivals[0];
+                                etaMins = first.mins;
+                                dest = first.dest_tc || '目的地';
+                                etaDisplay = (etaMins === 0) ? '即將' : (etaMins > 0 ? `${etaMins}分` : '--');
+                                extraETAs = arrivals.slice(1).map(a => a.mins >= 0 ? `${a.mins}分` : '--');
+                                if (walkMins !== null && etaMins !== null && etaMins >= 0) {
+                                    if (etaMins >= walkMins + 2) statusHtml = '<span class="status-badge status-ok">✅ 趕得切</span>';
+                                    else if (etaMins >= walkMins) statusHtml = '<span class="status-badge status-rush">⚡ 時間緊迫</span>';
+                                    else statusHtml = '<span class="status-badge status-late">❌ 趕唔切</span>';
+                                } else {
+                                    statusHtml = '<span class="status-badge" style="background:#6c757d;">⏳ 定位中</span>';
+                                }
+                                item._etaMins = etaMins;
+                            } else {
+                                if (error) {
+                                    let errMsg = error.message || '未知錯誤';
+                                    if (errMsg.includes('HTTP 404')) errMsg = '路線或車站不存在';
+                                    else if (errMsg.includes('NetworkError')) errMsg = '網絡連線問題';
+                                    else if (errMsg.includes('timeout')) errMsg = '請求逾時';
+                                    etaDisplay = '⚠️';
+                                    statusHtml = `<span class="status-badge" style="background:#c92a2a;">❌ ${errMsg}</span>`;
+                                } else {
+                                    etaDisplay = '--';
+                                    statusHtml = '<span class="status-badge" style="background:#6c757d;">暫無</span>';
+                                }
+                                item._etaMins = 999;
+                            }
+                            const walkText = walkMins !== null ? `🚶 ${Math.round(dist)}m (約${walkMins}分)` : '🚶 定位中';
+                            const badgeClass = `badge-${item.company.toLowerCase()}`;
+                            const dirBadge = item.direction === 'outbound' ? 'dir-out' : 'dir-in';
+                            const dirText = item.direction === 'outbound' ? '去程' : '回程';
+                            const inlineStatusHtml = statusHtml.replace(/status-badge/g, 'status-inline').replace(/direction_badge/g, 'dir-badge');
+                            let etaMultiHtml = `<span class="eta-min">${etaDisplay}</span>`;
+                            if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${extraETAs.join(' · ')}</span>`;
+                            const div = document.createElement('div');
+                            div.className = 'route-item';
+                            div.dataset.key = `${item.company}|${item.route}|${item.stopId}|${item.direction}`;
+                            div.innerHTML = `
+                                <span class="badge ${badgeClass}">${item.company}</span>
+                                <div class="route-name">${item.route}</div>
+                                <div class="route-info">
+                                    <div class="route-dest">往 ${dest} <span class="dir-badge ${dirBadge}">${dirText}</span></div>
+                                    <div class="station-name">📍 ${item.stopName}</div>
+                                    <div class="walk-info">${walkText}${inlineStatusHtml ? ` ${inlineStatusHtml}` : ''}</div>
+                                </div>
+                                <div class="route-right">
+                                    <div class="eta-multi">${etaMultiHtml}</div>
+                                    <button class="del-btn" data-key="${item.company}|${item.route}|${item.stopId}|${item.direction}">✕</button>
+                                </div>
+                            `;
+                            fragment.appendChild(div);
+                        }
+
+                        const newMap = new Map();
+                        for (const newDiv of Array.from(fragment.children)) {
+                            newMap.set(newDiv.dataset.key, newDiv);
+                        }
+                        const existing = Array.from(container.children);
+                        const existingKeys = new Set();
+                        for (const child of existing) {
+                            const key = child.dataset.key;
+                            if (!key || !newMap.has(key)) {
+                                container.removeChild(child);
+                            } else {
+                                existingKeys.add(key);
+                                child.innerHTML = newMap.get(key).innerHTML;
+                            }
+                        }
+                        for (const newDiv of Array.from(fragment.children)) {
+                            if (!existingKeys.has(newDiv.dataset.key)) {
+                                container.appendChild(newDiv);
+                            }
+                        }
+                        const ordered = Array.from(container.children).sort((a, b) => {
+                            const ia = keyToItem.get(a.dataset.key)?.index ?? 999;
+                            const ib = keyToItem.get(b.dataset.key)?.index ?? 999;
+                            return ia - ib;
+                        });
+                        ordered.forEach(node => container.appendChild(node));
+
+                        this.elements.refreshTime.textContent = `🔄 更新於 ${Utils.formatTime(new Date())}`;
+                    } finally {
+                        this._isFetching = false;
+                    }
                 }
 
                 showToast(msg) {
