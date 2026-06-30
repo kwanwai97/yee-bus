@@ -830,7 +830,8 @@
 
                 _onSearchInput() {
                     const route = this.elements.routeInput.value.trim().toUpperCase();
-                    if (!route) { this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); return; }
+                    if (!route) { this._gpsSuspended = false; this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); return; }
+                    this._gpsSuspended = true;
                     this.elements.stationSelect.innerHTML = '<option value="">⏳ 搜尋中...</option>';
                     this._searchStations(route);
                 }
