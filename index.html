@@ -586,12 +586,6 @@
                     this._isLocating = false;
                 }
 
-                resume() {
-                    if (this.lat !== null && this.lng !== null && !this.watchId) {
-                        this._startWatch();
-                    }
-                }
-
                 _updateStatus(text, ok) {
                     if (this.statusCallback) {
                         let color = '#6c757d';
@@ -968,8 +962,7 @@
                     const route = this.elements.routeInput.value.trim().toUpperCase();
                     if (!route) { this.showToast('請先輸入路線號碼'); return; }
                     const company = this.elements.companySelect.value;
-                    const wasWatching = this.gps.watchId !== null;
-                    if (wasWatching) {
+                    if (this.gps.watchId !== null) {
                         this.gps.stop();
                     }
                     try {
@@ -983,11 +976,6 @@
                         this._updateAddButton();
                         this._updateQuickButtonState();
                     }
-                    setTimeout(() => {
-                        if (wasWatching) {
-                            this.gps.resume();
-                        }
-                    }, 4000);
                 }
 
                 _addToWatchList() {
