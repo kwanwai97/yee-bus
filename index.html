@@ -686,6 +686,7 @@
                     this.currentStops = [];
                     this._isFetching = false;
                     this._toastTimeout = null;
+                    this._gpsSuspended = false;
                     this._bindEvents();
                     // 启动 GPS（自动检查权限，不弹窗）
                     this.gps.start((text, ok) => {
@@ -696,6 +697,7 @@
                         this._updateLocateButtonState();
                     });
                     this.gps.onPositionUpdate(Utils.debounce(() => {
+                        if (this._gpsSuspended) return;
                         this._updateDistanceInSelect();
                         this._updateQuickButtonState();
                         this._updateHint();
@@ -775,6 +777,7 @@
                     btn.disabled = true;
                     btn.classList.add('locating');
                     btn.textContent = '⏳ 定位中';
+                    this._gpsSuspended = false;
                     this.gps.requestLocation();
                     setTimeout(() => {
                         btn.classList.remove('locating');
@@ -962,6 +965,7 @@
                     const route = this.elements.routeInput.value.trim().toUpperCase();
                     if (!route) { this.showToast('請先輸入路線號碼'); return; }
                     const company = this.elements.companySelect.value;
+                    this._gpsSuspended = true;
                     if (this.gps.watchId !== null) {
                         this.gps.stop();
                     }
@@ -975,6 +979,7 @@
                         this.elements.stationSelect.innerHTML = `<option value="">❌ 無法展開: ${e.message||'請重試'}</option>`;
                         this._updateAddButton();
                         this._updateQuickButtonState();
+                        this._gpsSuspended = false;
                     }
                 }
 
@@ -992,8 +997,10 @@
                             this._updateAddButton();
                             this._updateQuickButtonState();
                             this.fetchETA();
+                            this._gpsSuspended = false;
                         } else {
                             this.showToast('此車站已在清單中');
+                            this._gpsSuspended = false;
                         }
                     } catch (e) { this.showToast('加入失敗: ' + e.message); }
                 }
@@ -1033,8 +1040,10 @@
                         this._updateAddButton();
                         this._updateQuickButtonState();
                         this.fetchETA();
+                        this._gpsSuspended = false;
                     } else {
                         this.showToast('此車站已在清單中');
+                        this._gpsSuspended = false;
                     }
                 }
 
