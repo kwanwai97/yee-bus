@@ -687,6 +687,7 @@
                     this.currentStops = [];
                     this._isFetching = false;
                     this._toastTimeout = null;
+                    this._gpsUpdatePending = false;
                     this._gpsSuspended = false;
                     this._bindEvents();
                     // 启动 GPS（自动检查权限，不弹窗）
@@ -697,14 +698,19 @@
                         this._updateQuickButtonState();
                         this._updateLocateButtonState();
                     });
-                    this.gps.onPositionUpdate(Utils.debounce(() => {
+                    this.gps.onPositionUpdate(() => {
                         if (this._gpsSuspended) return;
-                        this._updateDistanceInSelect();
-                        this._updateQuickButtonState();
-                        this._updateHint();
-                        this._updateLocateButtonState();
-                        this.fetchETA();
-                    }, 1000));
+                        if (this._gpsUpdatePending) return;
+                        this._gpsUpdatePending = true;
+                        Promise.resolve().then(() => {
+                            this._gpsUpdatePending = false;
+                            this._updateDistanceInSelect();
+                            this._updateQuickButtonState();
+                            this._updateHint();
+                            this._updateLocateButtonState();
+                            this.fetchETA();
+                        });
+                    });
                     this.fetchETA();
                     this._intervalId = setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
                 }
@@ -1132,12 +1138,15 @@
                             keyToItem.set(`${list[i].company}|${list[i].route}|${list[i].stopId}|${list[i].direction}`, { item: list[i], index: i });
                         }
 
+                        const resultByIndex = new Map();
+                        for (let r = 0; r < results.length; r++) resultByIndex.set(results[r].index, results[r]);
+
                         const fragment = document.createDocumentFragment();
                         for (let i = 0; i < list.length; i++) {
                             const item = list[i];
-                            const result = results.find(r => r.index === i);
-                            const arrivals = result?.arrivals || [];
-                            const error = result?.error || null;
+                            const result = resultByIndex.get(i) || { arrivals: [], error: null };
+                            const arrivals = result.arrivals || [];
+                            const error = result.error || null;
                             const dist = this.gps.getDistance(item.lat, item.lng);
                             const walkMins = isFinite(dist) ? Math.ceil(dist / CONFIG.UI.walkSpeedMpm) : null;
                             let etaMins = null, dest = '目的地', etaDisplay = '--', statusHtml = '', extraETAs = [];
@@ -1222,7 +1231,7 @@
                             const ib = keyToItem.get(b.dataset.key)?.index ?? 999;
                             return ia - ib;
                         });
-                        ordered.forEach(node => container.appendChild(node));
+                        if (ordered.length > 1 && ordered[0] !== container.firstChild) ordered.forEach(node => container.appendChild(node));
 
                         this.elements.refreshTime.textContent = `🔄 更新於 ${Utils.formatTime(new Date())}`;
                     } finally {
