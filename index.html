@@ -59,7 +59,7 @@
         .badge-ctb { background: #f59f00; color: #212529; }
         .badge-nlb { background: #1c7ed6; }
         .route-name { font-size: 1.35rem; font-weight: 800; min-width: 34px; max-width: 56px; text-align: center; color: #1a1a2e; overflow: hidden; white-space: nowrap; line-height: 1; align-self: center; }
-        .route-left { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; width: 38px; }
+        .route-left { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; width: 44px; }
         .route-left .badge { width: 100%; border-radius: 12px; padding: 1px 4px; font-size: 0.62rem; min-width: unset; }
         .route-left .route-name { font-size: 1.1rem; max-width: 100%; margin: 0; }
         .route-info { flex: 1; margin-left: 4px; min-width: 0; }
@@ -73,7 +73,7 @@
         .status-ok { background: #2b8a3e; }
         .status-rush { background: #e67700; }
         .status-late { background: #c92a2a; }
-        .route-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 4px; }
+        .route-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; margin-left: 4px; min-width: 54px; }
         .eta-multi { text-align: right; font-weight: 700; font-size: 1.1rem; color: #d63333; min-width: 50px; line-height: 1.2; }
         .eta-multi .eta-min { display: block; }
         .eta-multi .eta-min.small { font-size: 0.82rem; color: #6c757d; font-weight: 400; }
@@ -1192,8 +1192,8 @@
                                     <div class="walk-info">${walkText}${inlineStatusHtml ? ` ${inlineStatusHtml}` : ''}</div>
                                 </div>
                                 <div class="route-right">
-                                    <div class="eta-multi">${etaMultiHtml}</div>
                                     <button class="del-btn" data-key="${item.company}|${item.route}|${item.stopId}|${item.direction}">✕</button>
+                                    <div class="eta-multi">${etaMultiHtml}</div>
                                 </div>
                             `;
                             fragment.appendChild(div);
