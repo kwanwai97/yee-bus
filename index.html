@@ -283,6 +283,17 @@
                     const cacheKey = `${company}:${route}:${direction||'all'}`;
                     const cached = routeCache.get(cacheKey);
                     if (cached) return cached;
+                    // If requesting a specific direction and we have "all" cached, reuse it
+                    if (direction) {
+                        const allCached = routeCache.get(`${company}:${route}:all`);
+                        if (allCached) {
+                            const filtered = allCached.filter(s => s.direction === direction);
+                            if (filtered.length > 0) {
+                                routeCache.set(cacheKey, filtered);
+                                return filtered;
+                            }
+                        }
+                    }
                     let stops = [];
                     try {
                         if (company === 'KMB') stops = await this._fetchKMBStops(route, direction);
@@ -983,7 +994,7 @@
                     }
                     try {
                         this.elements.stationSelect.innerHTML = `<option value="">⏳ 展開 ${direction==='outbound'?'正向':'反向'} 站...</option>`;
-                        const stops = await BusAPI.getStops(company, route);
+                        const stops = await BusAPI.getStops(company, route, direction);
                         this.currentStops = stops;
                         this._populateStationSelect(stops, direction);
                         this.showToast(`已展開 ${direction==='outbound'?'正向':'反向'} 站點`);
@@ -1221,8 +1232,12 @@
                             if (!key || !newMap.has(key)) {
                                 container.removeChild(child);
                             } else {
+                                const newHtml = newMap.get(key).innerHTML;
+                                if (child._lastHtml !== newHtml) {
+                                    child.innerHTML = newHtml;
+                                    child._lastHtml = newHtml;
+                                }
                                 existingKeys.add(key);
-                                child.innerHTML = newMap.get(key).innerHTML;
                             }
                         }
                         for (const newDiv of Array.from(fragment.children)) {
@@ -1235,7 +1250,10 @@
                             const ib = keyToItem.get(b.dataset.key)?.index ?? 999;
                             return ia - ib;
                         });
-                        if (ordered.length > 1 && ordered[0] !== container.firstChild) ordered.forEach(node => container.appendChild(node));
+                        const currentKeys = Array.from(container.children).map(c => c.dataset.key);
+                        const sortedKeys = ordered.map(n => n.dataset.key);
+                        const sameOrder = currentKeys.length === sortedKeys.length && currentKeys.every((k, i) => k === sortedKeys[i]);
+                        if (!sameOrder) ordered.forEach(node => container.appendChild(node));
 
                         this.elements.refreshTime.textContent = `🔄 更新於 ${Utils.formatTime(new Date())}`;
                     } finally {
