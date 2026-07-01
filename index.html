@@ -54,11 +54,14 @@
         .monitor-header .actions button:hover { background: #e9ecef; }
         #busList { display: flex; flex-direction: column; gap: 5px; }
         .route-item { display: flex; align-items: center; padding: 6px 8px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #adb5bd; transition: background 0.1s; position: relative; gap: 8px; }
-        .route-item .badge { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 16px; color: #fff; min-width: 38px; text-align: center; letter-spacing: 0.15px; flex-shrink: 0; }
+        .route-item .badge { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 16px; color: #fff; min-width: 38px; text-align: center; letter-spacing: 0.15px; flex-shrink: 0; align-self: center; }
         .badge-kmb { background: #d63333; }
         .badge-ctb { background: #f59f00; color: #212529; }
         .badge-nlb { background: #1c7ed6; }
-        .route-name { font-size: 1.35rem; font-weight: 800; margin-left: 4px; min-width: 34px; max-width: 56px; text-align: center; color: #1a1a2e; overflow: hidden; white-space: nowrap; line-height: 1; }
+        .route-name { font-size: 1.35rem; font-weight: 800; min-width: 34px; max-width: 56px; text-align: center; color: #1a1a2e; overflow: hidden; white-space: nowrap; line-height: 1; align-self: center; }
+        .route-left { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; width: 38px; }
+        .route-left .badge { width: 100%; border-radius: 12px; padding: 1px 4px; font-size: 0.62rem; min-width: unset; }
+        .route-left .route-name { font-size: 1.1rem; max-width: 100%; margin: 0; }
         .route-info { flex: 1; margin-left: 4px; min-width: 0; }
         .route-dest { font-size: 0.95rem; font-weight: 600; color: #212529; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; line-height: 1.2; }
         .dir-badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 16px; color: #fff; font-weight: 600; background: #6c757d; }
@@ -79,7 +82,7 @@
         .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
         .loading-dots::after { content: '...'; animation: dots 1.2s steps(3, end) infinite; }
         @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
-        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-name { font-size: 1.05rem; min-width: 28px; max-width: 44px; } .route-dest { font-size: 0.75rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
+        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-left .route-name { font-size: 1rem; } .route-left .badge { font-size: 0.58rem; } .route-dest { font-size: 0.75rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #212529; color: #fff; padding: 10px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); z-index: 999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; max-width: 90%; }
         .toast.show { opacity: 1; }
         .quick-hint { font-size: 0.7rem; color: #6c757d; margin-top: 4px; text-align: right; min-height: 1.2rem; transition: color 0.3s; cursor: pointer; }
@@ -1179,8 +1182,10 @@
                             div.className = 'route-item';
                             div.dataset.key = `${item.company}|${item.route}|${item.stopId}|${item.direction}`;
                             div.innerHTML = `
-                                <span class="badge ${badgeClass}">${item.company}</span>
-                                <div class="route-name">${item.route}</div>
+                                <div class="route-left">
+                                    <span class="badge ${badgeClass}">${item.company}</span>
+                                    <div class="route-name">${item.route}</div>
+                                </div>
                                 <div class="route-info">
                                     <div class="route-dest">往 ${dest} <span class="dir-badge ${dirBadge}">${dirText}</span></div>
                                     <div class="station-name">📍 ${item.stopName}</div>
