@@ -153,7 +153,7 @@
                 GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
                 UI: {
                     refreshInterval: 30000,
-                    debounceDelay: 600,
+                    debounceDelay: 400,
                     walkSpeedMpm: 75,
                     maxETAShow: 3,
                     nearestDistanceThreshold: 2000, // 放宽至2公里
@@ -385,15 +385,19 @@
 
                 // ★ 修复：获取所有关联 routeId 的站点（去程/回程/特别班次）
                 static async _fetchNLBStops(route) {
-                    const listUrl = `${CONFIG.API.NLB}/route.php?action=list`;
-                    const listJson = await Fetcher.fetchJSON(listUrl);
+                    const listCacheKey = 'NLB:routeList';
+                    let listJson = routeCache.get(listCacheKey);
+                    if (!listJson) {
+                        const listUrl = `${CONFIG.API.NLB}/route.php?action=list`;
+                        listJson = await Fetcher.fetchJSON(listUrl);
+                        routeCache.set(listCacheKey, listJson);
+                    }
                     const routes = listJson.routes || [];
                     const matchedRoutes = routes.filter(r => r.routeNo.toUpperCase() === route.toUpperCase());
                     if (matchedRoutes.length === 0) throw new Error(`找不到嶼巴路線 ${route}`);
                     let allStops = [];
                     for (const rItem of matchedRoutes) {
                         const routeId = rItem.routeId;
-                        // 根据官方字段判断方向，若不存在则默认为 outbound
                         const direction = (rItem.direction && rItem.direction.includes('Inbound')) ? 'inbound' : 'outbound';
                         const stopUrl = `${CONFIG.API.NLB}/stop.php?action=list&routeId=${routeId}`;
                         const stopJson = await Fetcher.fetchJSON(stopUrl);
