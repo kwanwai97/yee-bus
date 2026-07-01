@@ -65,9 +65,6 @@
         .route-info { flex: 1; margin-left: 0; min-width: 0; }
         .route-dest { font-size: 0.88rem; font-weight: 600; color: #212529; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; line-height: 1.1; }
         .dir-badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 16px; color: #fff; font-weight: 600; background: #6c757d; }
-        .route-item { display: flex; align-items: center; padding: 6px 8px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #adb5bd; transition: background 0.1s; position: relative; gap: 48px; }
-        .station-name { font-size: 0.78rem; color: #495057; margin-top: 0px; word-break: break-word; line-height: 1.1; }
-        .walk-info { font-size: 0.73rem; color: #6c757d; margin-top: 0px; line-height: 1.1; }
         .status-inline { font-size: 0.72rem; font-weight: 700; padding: 0px 6px; border-radius: 16px; color: #fff; line-height: 1.2; white-space: nowrap; flex-shrink: 0; }
         .status-ok { background: #2b8a3e; }
         .status-rush { background: #e67700; }
@@ -1186,7 +1183,7 @@
                                     <div class="route-name">${item.route}</div>
                                 </div>
                                 <div class="route-info">
-                                    <div class="route-dest">往 ${dest} <span class="dir-badge ${dirBadge}">${dirText}</span></div>
+                                    <div class="route-dest">往 ${dest}</div>
                                     <div class="station-name">📍 ${item.stopName}</div>
                                     <div class="walk-info">${walkText}${inlineStatusHtml ? ` ${inlineStatusHtml}` : ''}</div>
                                 </div>
