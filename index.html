@@ -149,7 +149,8 @@
                 API: {
                     KMB: 'https://data.etabus.gov.hk/v1/transport/kmb',
                     CTB: 'https://rt.data.gov.hk/v1/transport/citybus-nwfb',
-                    NLB: 'https://rt.data.gov.hk/v2/transport/nlb'
+                    NLB: 'https://rt.data.gov.hk/v2/transport/nlb',
+                    KMB_STOP_PLATES: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/kmb/stops/allstops.json'
                 },
                 GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
                 UI: {
@@ -306,6 +307,64 @@
                     throw new Error(`請求失敗 (重試 ${maxAttempts} 次): ${lastError?.message||'未知錯誤'}`);
                 }
             }
+
+            // ========== 九巴／龍運站牌編號（官方 ETA API 沒有此欄，用公開站點清單對照 stopId） ==========
+            const StopPlates = {
+                _map: Object.create(null),
+                _ready: null,
+                STORAGE_KEY: 'bus_stop_plates_v1',
+                TTL_MS: 24 * 60 * 60 * 1000,
+                PLATE_RE: /\(([A-Z]{1,3}\d{2,4})\)\s*$/,
+                load() {
+                    if (this._ready) return this._ready;
+                    this._ready = this._load();
+                    return this._ready;
+                },
+                _readCache() {
+                    try {
+                        const cached = Utils.safeJSONParse(localStorage.getItem(this.STORAGE_KEY), null);
+                        if (cached && cached.map && typeof cached.map === 'object') return cached;
+                    } catch (e) {}
+                    return null;
+                },
+                async _load() {
+                    const cached = this._readCache();
+                    if (cached && cached.ts && (Date.now() - cached.ts) < this.TTL_MS) {
+                        this._map = cached.map;
+                        return;
+                    }
+                    try {
+                        const json = await Fetcher.fetchJSON(CONFIG.API.KMB_STOP_PLATES, { timeoutMs: 25000 });
+                        const entries = (json && typeof json === 'object' && !Array.isArray(json))
+                            ? Object.values(json)
+                            : (Array.isArray(json) ? json : []);
+                        const map = Object.create(null);
+                        for (const d of entries) {
+                            if (!d || !d.stop) continue;
+                            const m = this.PLATE_RE.exec(String(d.name_tc || d.name_en || ''));
+                            if (m) map[d.stop] = m[1];
+                        }
+                        if (Object.keys(map).length > 0) {
+                            this._map = map;
+                            try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ ts: Date.now(), map })); } catch (e) {}
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('載入站牌編號失敗:', e);
+                    }
+                    if (cached && cached.map) this._map = cached.map;
+                },
+                code(stopId) {
+                    return (stopId && this._map[stopId]) || '';
+                },
+                label(stopName, stopId) {
+                    const name = stopName || '';
+                    const code = this.code(stopId);
+                    if (!code) return name;
+                    if (name.includes('(' + code + ')') || name.includes('（' + code + '）')) return name;
+                    return name + ' (' + code + ')';
+                }
+            };
 
             // ========== 巴士 API（含修复） ==========
             class BusAPI {
@@ -830,6 +889,10 @@
                     });
                     this.fetchETA();
                     this._intervalId = setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
+                    StopPlates.load().then(() => {
+                        if (this.currentStops && this.currentStops.length) this._populateStationSelect(this.currentStops);
+                        this.fetchETA();
+                    });
                 }
 
                 _bindEvents() {
@@ -1030,7 +1093,9 @@
                         const special = (s.serviceType && String(s.serviceType) !== '1')
                             ? `（特別${s.serviceType}${s.variantOrig ? ' · ' + s.variantOrig : ''}）`
                             : '';
-                        const label = `${prefix}第 ${seq} 站: ${cleanName}${special} (${distText})`;
+                        const plate = StopPlates.code(s.stopId);
+                        const plateText = (plate && !cleanName.includes(plate)) ? ` (${plate})` : '';
+                        const label = `${prefix}第 ${seq} 站: ${cleanName}${plateText}${special} (${distText})`;
                         opt.textContent = label;
                         opt.value = JSON.stringify({
                             company: s.company,
@@ -1321,7 +1386,7 @@
                             const company = Utils.escapeHtml(item.company);
                             const routeEsc = Utils.escapeHtml(item.route);
                             const destEsc = Utils.escapeHtml(dest);
-                            const stopEsc = Utils.escapeHtml(item.stopName || '');
+                            const stopEsc = Utils.escapeHtml(StopPlates.label(item.stopName || '', item.stopId));
                             const remarkText = (arrivals && arrivals[0] && arrivals[0].remark) ? String(arrivals[0].remark).trim() : '';
                             const remarkHtml = remarkText ? `<div class="eta-remark">${Utils.escapeHtml(remarkText)}</div>` : '';
                             const badgeClass = `badge-${String(item.company || '').toLowerCase()}`;
