@@ -75,6 +75,7 @@
         .eta-multi { text-align: right; font-weight: 700; font-size: 1.1rem; color: #d63333; min-width: 50px; line-height: 1.1; }
         .eta-multi .eta-min { display: block; }
         .eta-multi .eta-min.small { font-size: 0.82rem; color: #6c757d; font-weight: 400; }
+        .eta-remark { font-size: 0.72rem; color: #868e96; margin-top: 0px; line-height: 1.1; }
         .del-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #adb5bd; transition: color 0.15s; padding: 0 4px; line-height: 1; }
         .del-btn:hover { color: #c92a2a; }
         .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
@@ -148,7 +149,8 @@
                 API: {
                     KMB: 'https://data.etabus.gov.hk/v1/transport/kmb',
                     CTB: 'https://rt.data.gov.hk/v1/transport/citybus-nwfb',
-                    NLB: 'https://rt.data.gov.hk/v2/transport/nlb'
+                    NLB: 'https://rt.data.gov.hk/v2/transport/nlb',
+                    KMB_STOP_PLATES: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/kmb/stops/allstops.json'
                 },
                 GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
                 UI: {
@@ -157,7 +159,8 @@
                     walkSpeedMpm: 75,
                     maxETAShow: 3,
                     nearestDistanceThreshold: 2000, // 放宽至2公里
-                    maxConcurrentRequests: 5
+                    maxConcurrentRequests: 5,
+                    fetchTimeoutMs: 12000
                 },
                 CACHE: {
                     stopTTL: 86400000,
@@ -169,6 +172,14 @@
             // ========== 工具函數 ==========
             const Utils = {
                 safeJSONParse(str, fallback = null) { try { return JSON.parse(str); } catch { return fallback; } },
+                escapeHtml(str) {
+                    return String(str ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                },
                 calcDistance(lat1, lon1, lat2, lon2) {
                     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
                     const R = 6371e3;
@@ -261,25 +272,103 @@
             // ========== 資料獲取器 ==========
             class Fetcher {
                 static async fetchJSON(url, options = {}) {
-                    const { maxAttempts = CONFIG.RETRY.maxAttempts, delayMs = CONFIG.RETRY.delayMs } = options;
+                    const { maxAttempts = CONFIG.RETRY.maxAttempts, delayMs = CONFIG.RETRY.delayMs, timeoutMs = CONFIG.UI.fetchTimeoutMs, signal } = options;
                     let lastError;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                        if (signal && signal.aborted) {
+                            const abortErr = new Error('已取消');
+                            abortErr.name = 'AbortError';
+                            throw abortErr;
+                        }
+                        const ctrl = new AbortController();
+                        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+                        const onParentAbort = () => ctrl.abort();
+                        if (signal) signal.addEventListener('abort', onParentAbort, { once: true });
                         try {
-                            const res = await fetch(url);
+                            const res = await fetch(url, { signal: ctrl.signal });
                             if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
                             return await res.json();
                         } catch (e) {
                             lastError = e;
+                            const cancelledByCaller = signal && signal.aborted;
+                            const isAbort = e && (e.name === 'AbortError' || /aborted/i.test(e.message || ''));
+                            if (cancelledByCaller) {
+                                const abortErr = new Error('已取消');
+                                abortErr.name = 'AbortError';
+                                throw abortErr;
+                            }
+                            if (isAbort) lastError = new Error('timeout');
                             if (attempt < maxAttempts) await Utils.sleep(delayMs * attempt);
+                        } finally {
+                            clearTimeout(timer);
+                            if (signal) signal.removeEventListener('abort', onParentAbort);
                         }
                     }
                     throw new Error(`請求失敗 (重試 ${maxAttempts} 次): ${lastError?.message||'未知錯誤'}`);
                 }
             }
 
+            // ========== 九巴／龍運站牌編號（官方 ETA API 沒有此欄，用公開站點清單對照 stopId） ==========
+            const StopPlates = {
+                _map: Object.create(null),
+                _ready: null,
+                STORAGE_KEY: 'bus_stop_plates_v1',
+                TTL_MS: 24 * 60 * 60 * 1000,
+                PLATE_RE: /\(([A-Z]{1,3}\d{2,4})\)\s*$/,
+                load() {
+                    if (this._ready) return this._ready;
+                    this._ready = this._load();
+                    return this._ready;
+                },
+                _readCache() {
+                    try {
+                        const cached = Utils.safeJSONParse(localStorage.getItem(this.STORAGE_KEY), null);
+                        if (cached && cached.map && typeof cached.map === 'object') return cached;
+                    } catch (e) {}
+                    return null;
+                },
+                async _load() {
+                    const cached = this._readCache();
+                    if (cached && cached.ts && (Date.now() - cached.ts) < this.TTL_MS) {
+                        this._map = cached.map;
+                        return;
+                    }
+                    try {
+                        const json = await Fetcher.fetchJSON(CONFIG.API.KMB_STOP_PLATES, { timeoutMs: 25000 });
+                        const entries = (json && typeof json === 'object' && !Array.isArray(json))
+                            ? Object.values(json)
+                            : (Array.isArray(json) ? json : []);
+                        const map = Object.create(null);
+                        for (const d of entries) {
+                            if (!d || !d.stop) continue;
+                            const m = this.PLATE_RE.exec(String(d.name_tc || d.name_en || ''));
+                            if (m) map[d.stop] = m[1];
+                        }
+                        if (Object.keys(map).length > 0) {
+                            this._map = map;
+                            try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ ts: Date.now(), map })); } catch (e) {}
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('載入站牌編號失敗:', e);
+                    }
+                    if (cached && cached.map) this._map = cached.map;
+                },
+                code(stopId) {
+                    return (stopId && this._map[stopId]) || '';
+                },
+                label(stopName, stopId) {
+                    const name = stopName || '';
+                    const code = this.code(stopId);
+                    if (!code) return name;
+                    if (name.includes('(' + code + ')') || name.includes('（' + code + '）')) return name;
+                    return name + ' (' + code + ')';
+                }
+            };
+
             // ========== 巴士 API（含修复） ==========
             class BusAPI {
-                static async getStops(company, route, direction = null) {
+                static async getStops(company, route, direction = null, signal = null) {
                     const cacheKey = `${company}:${route}:${direction||'all'}`;
                     const cached = routeCache.get(cacheKey);
                     if (cached) return cached;
@@ -296,9 +385,9 @@
                     }
                     let stops = [];
                     try {
-                        if (company === 'KMB') stops = await this._fetchKMBStops(route, direction);
-                        else if (company === 'CTB') stops = await this._fetchCTBStops(route, direction);
-                        else if (company === 'NLB') stops = await this._fetchNLBStops(route);
+                        if (company === 'KMB') stops = await this._fetchKMBStops(route, direction, signal);
+                        else if (company === 'CTB') stops = await this._fetchCTBStops(route, direction, signal);
+                        else if (company === 'NLB') stops = await this._fetchNLBStops(route, signal);
                     } catch (e) {
                         console.error('獲取車站失敗:', e);
                         throw e;
@@ -319,16 +408,46 @@
                     return normalized;
                 }
 
-                static async _fetchKMBStops(route, direction) {
-                    const dirs = direction ? [direction] : ['outbound', 'inbound'];
+                static async _getKMBRouteVariants(route, signal) {
+                    const listCacheKey = 'KMB:routeList';
+                    let list = routeCache.get(listCacheKey);
+                    if (!list) {
+                        const json = await Fetcher.fetchJSON(`${CONFIG.API.KMB}/route/`, { signal });
+                        list = json.data || [];
+                        routeCache.set(listCacheKey, list);
+                    }
+                    const wanted = String(route).toUpperCase();
+                    return list.filter(r => String(r.route).toUpperCase() === wanted);
+                }
+                static _boundToDir(bound) {
+                    return (bound === 'I' || bound === 'inbound') ? 'inbound' : 'outbound';
+                }
+                static async _fetchKMBStops(route, direction, signal) {
+                    const variants = await this._getKMBRouteVariants(route, signal);
+                    let pairs = [];
+                    if (variants.length > 0) {
+                        const seen = new Set();
+                        for (const v of variants) {
+                            const dir = this._boundToDir(v.bound);
+                            if (direction && dir !== direction) continue;
+                            const serviceType = String(v.service_type || '1');
+                            const key = `${dir}:${serviceType}`;
+                            if (seen.has(key)) continue;
+                            seen.add(key);
+                            pairs.push({ dir, serviceType, dest_tc: v.dest_tc || '', orig_tc: v.orig_tc || '' });
+                        }
+                    } else {
+                        const dirs = direction ? [direction] : ['outbound', 'inbound'];
+                        pairs = dirs.map(dir => ({ dir, serviceType: '1', dest_tc: '', orig_tc: '' }));
+                    }
                     let all = [];
-                    for (const dir of dirs) {
-                        const url = `${CONFIG.API.KMB}/route-stop/${route}/${dir}/1`;
-                        const json = await Fetcher.fetchJSON(url);
+                    for (const p of pairs) {
+                        const url = `${CONFIG.API.KMB}/route-stop/${route}/${p.dir}/${p.serviceType}`;
+                        const json = await Fetcher.fetchJSON(url, { signal });
                         const data = json.data || [];
                         const stopIds = data.map(item => item.stop);
                         const details = await Utils.parallelLimit(
-                            stopIds.map(id => () => this._getKMBStopDetail(id)),
+                            stopIds.map(id => () => this._getKMBStopDetail(id, signal)),
                             5
                         );
                         data.forEach((item, i) => {
@@ -336,37 +455,39 @@
                             all.push({
                                 stopId: item.stop,
                                 seq: parseInt(item.seq, 10) || 0,
-                                direction: dir,
-                                serviceType: item.service_type || 1,
+                                direction: p.dir,
+                                serviceType: item.service_type || p.serviceType,
                                 stopName: stopInfo.name_tc || '九巴車站',
                                 lat: parseFloat(stopInfo.lat) || 0,
-                                lng: parseFloat(stopInfo.long) || 0
+                                lng: parseFloat(stopInfo.long) || 0,
+                                variantDest: p.dest_tc || '',
+                                variantOrig: p.orig_tc || ''
                             });
                         });
                     }
                     return all;
                 }
-                static async _getKMBStopDetail(stopId) {
+                static async _getKMBStopDetail(stopId, signal) {
                     const cacheKey = `KMB:stop:${stopId}`;
                     const cached = stopCache.get(cacheKey);
                     if (cached) return cached;
                     const url = `${CONFIG.API.KMB}/stop/${stopId}`;
-                    const json = await Fetcher.fetchJSON(url);
+                    const json = await Fetcher.fetchJSON(url, { signal });
                     const data = json.data || {};
                     stopCache.set(cacheKey, data);
                     return data;
                 }
 
-                static async _fetchCTBStops(route, direction) {
+                static async _fetchCTBStops(route, direction, signal) {
                     const dirs = direction ? [direction] : ['outbound', 'inbound'];
                     let all = [];
                     for (const dir of dirs) {
                         const url = `${CONFIG.API.CTB}/route-stop/CTB/${route}/${dir}`;
-                        const json = await Fetcher.fetchJSON(url);
+                        const json = await Fetcher.fetchJSON(url, { signal });
                         const data = json.data || [];
                         const stopIds = data.map(item => item.stop);
                         const details = await Utils.parallelLimit(
-                            stopIds.map(id => () => this._getCTBStopDetail(id)),
+                            stopIds.map(id => () => this._getCTBStopDetail(id, signal)),
                             5
                         );
                         data.forEach((item, i) => {
@@ -383,24 +504,24 @@
                     }
                     return all;
                 }
-                static async _getCTBStopDetail(stopId) {
+                static async _getCTBStopDetail(stopId, signal) {
                     const cacheKey = `CTB:stop:${stopId}`;
                     const cached = stopCache.get(cacheKey);
                     if (cached) return cached;
                     const url = `${CONFIG.API.CTB}/stop/${stopId}`;
-                    const json = await Fetcher.fetchJSON(url);
+                    const json = await Fetcher.fetchJSON(url, { signal });
                     const data = json.data || {};
                     stopCache.set(cacheKey, data);
                     return data;
                 }
 
                 // ★ 修复：获取所有关联 routeId 的站点（去程/回程/特别班次）
-                static async _fetchNLBStops(route) {
+                static async _fetchNLBStops(route, signal) {
                     const listCacheKey = 'NLB:routeList';
                     let listJson = routeCache.get(listCacheKey);
                     if (!listJson) {
                         const listUrl = `${CONFIG.API.NLB}/route.php?action=list`;
-                        listJson = await Fetcher.fetchJSON(listUrl);
+                        listJson = await Fetcher.fetchJSON(listUrl, { signal });
                         routeCache.set(listCacheKey, listJson);
                     }
                     const routes = listJson.routes || [];
@@ -411,7 +532,7 @@
                         const routeId = rItem.routeId;
                         const direction = (rItem.direction && rItem.direction.includes('Inbound')) ? 'inbound' : 'outbound';
                         const stopUrl = `${CONFIG.API.NLB}/stop.php?action=list&routeId=${routeId}`;
-                        const stopJson = await Fetcher.fetchJSON(stopUrl);
+                        const stopJson = await Fetcher.fetchJSON(stopUrl, { signal });
                         const stops = stopJson.stops || [];
                         stops.forEach((s, idx) => {
                             allStops.push({
@@ -457,17 +578,22 @@
                     let arrivals = [];
                     if (company === 'KMB' || company === 'CTB') {
                         const data = json.data || [];
+                        const wantDir = direction === 'outbound' ? 'O' : 'I';
                         let filtered = data.filter(item => {
-                            const dirMatch = item.dir === (direction === 'outbound' ? 'O' : 'I');
+                            const dirMatch = item.dir === wantDir;
                             const seqMatch = item.seq == seq;
                             return dirMatch && seqMatch;
                         });
-                        if (filtered.length === 0) filtered = data;
+                        if (filtered.length === 0) {
+                            filtered = data.filter(item => item.dir === wantDir);
+                        }
+                        filtered = filtered.filter(item => item.eta);
                         filtered.sort((a, b) => new Date(a.eta) - new Date(b.eta));
                         arrivals = filtered.slice(0, CONFIG.UI.maxETAShow).map(item => {
                             const etaDate = new Date(item.eta);
-                            const mins = Math.floor((etaDate - Date.now()) / 60000);
-                            return { eta: etaDate, mins: mins < 0 ? 0 : mins, dest_tc: item.dest_tc || '目的地', remark: item.remark_tc || '' };
+                            const rawMins = Math.floor((etaDate - Date.now()) / 60000);
+                            const mins = isNaN(rawMins) ? -1 : (rawMins < 0 ? 0 : rawMins);
+                            return { eta: etaDate, mins, dest_tc: item.dest_tc || '目的地', remark: item.rmk_tc || item.remark_tc || '' };
                         });
                     } else if (company === 'NLB') {
                         const data = json.estimatedArrivals || [];
@@ -481,7 +607,7 @@
                                 eta: item.estimatedArrivalTime ? new Date(item.estimatedArrivalTime) : null,
                                 mins,
                                 dest_tc: item.destinationName_tc || item.destinationName || '目的地',
-                                remark: item.remark_tc || ''
+                                remark: item.rmk_tc || item.remark_tc || item.remark || ''
                             };
                         });
                     }
@@ -648,7 +774,8 @@
                 }
                 save() { localStorage.setItem('watchedBusRoutes', JSON.stringify(this.items)); }
                 add(item) {
-                    const exists = this.items.some(b => b.company === item.company && b.route === item.route && b.stopId === item.stopId && b.direction === item.direction);
+                    const st = String(item.serviceType || 1);
+                    const exists = this.items.some(b => b.company === item.company && b.route === item.route && b.stopId === item.stopId && b.direction === item.direction && String(b.serviceType || 1) === st);
                     if (exists) return false;
                     if (item.company === 'NLB' && !item.routeId) {
                         const cached = routeCache.get(`NLB:${item.route}:all`);
@@ -672,7 +799,39 @@
                     this.save();
                 }
                 exportData() { return JSON.stringify(this.items, null, 2); }
-                importData(json) { try { const data = JSON.parse(json); if (Array.isArray(data)) { this.items = data; this.save(); return true; } } catch (e) {} return false; }
+                importData(json) {
+                    try {
+                        const data = JSON.parse(json);
+                        if (!Array.isArray(data)) return false;
+                        const allowed = new Set(['KMB', 'CTB', 'NLB']);
+                        const clean = (v, max) => String(v ?? '').replace(/[<>]/g, '').trim().slice(0, max);
+                        const cleaned = [];
+                        for (const raw of data) {
+                            if (!raw || typeof raw !== 'object') continue;
+                            const company = String(raw.company || '').toUpperCase();
+                            if (!allowed.has(company)) continue;
+                            const route = clean(raw.route, 16);
+                            const stopId = clean(raw.stopId, 64);
+                            if (!route || !stopId) continue;
+                            const serviceType = raw.serviceType || 1;
+                            cleaned.push({
+                                company,
+                                route,
+                                stopId,
+                                stopName: clean(raw.stopName, 80) || '未知站',
+                                direction: raw.direction === 'inbound' ? 'inbound' : 'outbound',
+                                seq: Number.isFinite(Number(raw.seq)) ? Number(raw.seq) : 0,
+                                serviceType,
+                                lat: parseFloat(raw.lat) || 0,
+                                lng: parseFloat(raw.lng) || 0,
+                                routeId: raw.routeId || null
+                            });
+                        }
+                        this.items = cleaned;
+                        this.save();
+                        return true;
+                    } catch (e) { return false; }
+                }
             }
 
             // ========== 主要 UI 控制器 ==========
@@ -704,6 +863,8 @@
                     this._toastTimeout = null;
                     this._gpsUpdatePending = false;
                     this._gpsSuspended = false;
+                    this._searchGen = 0;
+                    this._searchAbort = null;
                     this._bindEvents();
                     // 启动 GPS（自动检查权限，不弹窗）
                     this.gps.start((text, ok) => {
@@ -728,6 +889,10 @@
                     });
                     this.fetchETA();
                     this._intervalId = setInterval(() => this.fetchETA(), CONFIG.UI.refreshInterval);
+                    StopPlates.load().then(() => {
+                        if (this.currentStops && this.currentStops.length) this._populateStationSelect(this.currentStops);
+                        this.fetchETA();
+                    });
                 }
 
                 _bindEvents() {
@@ -783,12 +948,15 @@
                         if (!btn) return;
                         const key = btn.dataset.key;
                         if (!key) return;
-                        const [company, route, stopId, direction] = key.split('|');
+                        const parts = key.split('|');
+                        const company = parts[0], route = parts[1], stopId = parts[2], direction = parts[3];
+                        const serviceType = parts[4] || '1';
                         const idx = this.watchList.items.findIndex(it =>
                             it.company === company &&
                             it.route === route &&
                             it.stopId === stopId &&
-                            it.direction === direction
+                            it.direction === direction &&
+                            String(it.serviceType || 1) === String(serviceType)
                         );
                         if (idx !== -1) { this.watchList.remove(idx); this.fetchETA(); this.showToast('已移除'); }
                     });
@@ -857,15 +1025,32 @@
                     this.elements.stationSelect.innerHTML = '<option value="">⏳ 搜尋中...</option>';
                     this._searchStations(route);
                 }
+                _beginSearch() {
+                    this._searchGen += 1;
+                    if (this._searchAbort) this._searchAbort.abort();
+                    this._searchAbort = new AbortController();
+                    return { gen: this._searchGen, signal: this._searchAbort.signal };
+                }
+                _setSelectMessage(msg) {
+                    const select = this.elements.stationSelect;
+                    select.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = msg;
+                    select.appendChild(opt);
+                }
                 async _searchStations(route) {
                     const company = this.elements.companySelect.value;
+                    const { gen, signal } = this._beginSearch();
                     try {
-                        const stops = await BusAPI.getStops(company, route);
+                        const stops = await BusAPI.getStops(company, route, null, signal);
+                        if (gen !== this._searchGen) return;
                         this.currentStops = stops;
                         this._populateStationSelect(stops, null);
                     } catch (e) {
+                        if (gen !== this._searchGen || (e && e.name === 'AbortError')) return;
                         console.error('搜尋失敗:', e);
-                        this.elements.stationSelect.innerHTML = `<option value="">❌ 搜尋失敗: ${e.message||'請稍後重試'}</option>`;
+                        this._setSelectMessage(`❌ 搜尋失敗: ${e.message||'請稍後重試'}`);
                         this._updateAddButton();
                         this._updateQuickButtonState();
                     }
@@ -890,10 +1075,6 @@
                         inbound = stops.filter(s => s.direction === 'inbound');
                         outbound.sort((a, b) => a.seq - b.seq);
                         inbound.sort((a, b) => a.seq - b.seq);
-                        // 如果 inbound 为空，说明原始数据可能只有单向，则用反向排序伪造（但这种情况很少）
-                        if (inbound.length === 0 && outbound.length > 0) {
-                            inbound = outbound.map(s => ({ ...s, direction: 'inbound', seq: outbound.length - s.seq + 1 })).reverse();
-                        }
                     } else {
                         outbound = stops.filter(s => s.direction === 'outbound');
                         inbound = stops.filter(s => s.direction === 'inbound');
@@ -909,7 +1090,12 @@
                         const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
                         const seq = displaySeq !== null ? displaySeq : s.seq;
                         const cleanName = (s.stopName || '').replace(/\s*\([^)]*\)/, '').trim();
-                        const label = `${prefix}第 ${seq} 站: ${cleanName} (${distText})`;
+                        const special = (s.serviceType && String(s.serviceType) !== '1')
+                            ? `（特別${s.serviceType}${s.variantOrig ? ' · ' + s.variantOrig : ''}）`
+                            : '';
+                        const plate = StopPlates.code(s.stopId);
+                        const plateText = (plate && !cleanName.includes(plate)) ? ` (${plate})` : '';
+                        const label = `${prefix}第 ${seq} 站: ${cleanName}${plateText}${special} (${distText})`;
                         opt.textContent = label;
                         opt.value = JSON.stringify({
                             company: s.company,
@@ -992,14 +1178,17 @@
                     if (this.gps.watchId !== null) {
                         this.gps.stop();
                     }
+                    const { gen, signal } = this._beginSearch();
                     try {
-                        this.elements.stationSelect.innerHTML = `<option value="">⏳ 展開 ${direction==='outbound'?'正向':'反向'} 站...</option>`;
-                        const stops = await BusAPI.getStops(company, route, direction);
+                        this._setSelectMessage(`⏳ 展開 ${direction==='outbound'?'正向':'反向'} 站...`);
+                        const stops = await BusAPI.getStops(company, route, direction, signal);
+                        if (gen !== this._searchGen) return;
                         this.currentStops = stops;
                         this._populateStationSelect(stops, direction);
                         this.showToast(`已展開 ${direction==='outbound'?'正向':'反向'} 站點`);
                     } catch (e) {
-                        this.elements.stationSelect.innerHTML = `<option value="">❌ 無法展開: ${e.message||'請重試'}</option>`;
+                        if (gen !== this._searchGen || (e && e.name === 'AbortError')) return;
+                        this._setSelectMessage(`❌ 無法展開: ${e.message||'請重試'}`);
                         this._updateAddButton();
                         this._updateQuickButtonState();
                         this._gpsSuspended = false;
@@ -1150,7 +1339,7 @@
 
                         const keyToItem = new Map();
                         for (let i = 0; i < list.length; i++) {
-                            keyToItem.set(`${list[i].company}|${list[i].route}|${list[i].stopId}|${list[i].direction}`, { item: list[i], index: i });
+                            keyToItem.set(`${list[i].company}|${list[i].route}|${list[i].stopId}|${list[i].direction}|${list[i].serviceType || 1}`, { item: list[i], index: i });
                         }
 
                         const resultByIndex = new Map();
@@ -1186,7 +1375,7 @@
                                     else if (errMsg.includes('NetworkError')) errMsg = '網絡連線問題';
                                     else if (errMsg.includes('timeout')) errMsg = '請求逾時';
                                     etaDisplay = '⚠️';
-                                    statusHtml = `<span class="status-badge" style="background:#c92a2a;">❌ ${errMsg}</span>`;
+                                    statusHtml = `<span class="status-badge" style="background:#c92a2a;">❌ ${Utils.escapeHtml(errMsg)}</span>`;
                                 } else {
                                     etaDisplay = '--';
                                     statusHtml = '<span class="status-badge" style="background:#6c757d;">暫無</span>';
@@ -1194,27 +1383,34 @@
                                 item._etaMins = 999;
                             }
                             const walkText = walkMins !== null ? `🚶 ${Math.round(dist)}m (約${walkMins}分)` : '🚶 定位中';
-                            const badgeClass = `badge-${item.company.toLowerCase()}`;
-                            const dirBadge = item.direction === 'outbound' ? 'dir-out' : 'dir-in';
-                            const dirText = item.direction === 'outbound' ? '去程' : '回程';
+                            const company = Utils.escapeHtml(item.company);
+                            const routeEsc = Utils.escapeHtml(item.route);
+                            const destEsc = Utils.escapeHtml(dest);
+                            const stopEsc = Utils.escapeHtml(StopPlates.label(item.stopName || '', item.stopId));
+                            const remarkText = (arrivals && arrivals[0] && arrivals[0].remark) ? String(arrivals[0].remark).trim() : '';
+                            const remarkHtml = remarkText ? `<div class="eta-remark">${Utils.escapeHtml(remarkText)}</div>` : '';
+                            const badgeClass = `badge-${String(item.company || '').toLowerCase()}`;
+                            const itemKey = `${item.company}|${item.route}|${item.stopId}|${item.direction}|${item.serviceType || 1}`;
+                            const keyEsc = Utils.escapeHtml(itemKey);
                             const inlineStatusHtml = statusHtml.replace(/status-badge/g, 'status-inline').replace(/direction_badge/g, 'dir-badge');
-                            let etaMultiHtml = `<span class="eta-min">${etaDisplay}</span>`;
-                            if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${extraETAs.join(' · ')}</span>`;
+                            let etaMultiHtml = `<span class="eta-min">${Utils.escapeHtml(etaDisplay)}</span>`;
+                            if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${Utils.escapeHtml(extraETAs.join(' · '))}</span>`;
                             const div = document.createElement('div');
                             div.className = 'route-item';
-                            div.dataset.key = `${item.company}|${item.route}|${item.stopId}|${item.direction}`;
+                            div.dataset.key = itemKey;
                             div.innerHTML = `
                                 <div class="route-left">
-                                    <span class="badge ${badgeClass}">${item.company}</span>
-                                    <div class="route-name">${item.route}</div>
+                                    <span class="badge ${badgeClass}">${company}</span>
+                                    <div class="route-name">${routeEsc}</div>
                                 </div>
                                 <div class="route-info">
-                                    <div class="route-dest">往 ${dest}</div>
-                                    <div class="station-name">📍 ${item.stopName}</div>
+                                    <div class="route-dest">往 ${destEsc}</div>
+                                    <div class="station-name">📍 ${stopEsc}</div>
+                                    ${remarkHtml}
                                     <div class="walk-info">${walkText}${inlineStatusHtml ? ` ${inlineStatusHtml}` : ''}</div>
                                 </div>
                                 <div class="route-right">
-                                    <button class="del-btn" data-key="${item.company}|${item.route}|${item.stopId}|${item.direction}">✕</button>
+                                    <button class="del-btn" data-key="${keyEsc}">✕</button>
                                     <div class="eta-multi">${etaMultiHtml}</div>
                                 </div>
                             `;
