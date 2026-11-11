@@ -185,7 +185,7 @@
             <div id="tabExplore" class="tab-panel nearby-panel" data-panel="explore" role="tabpanel" aria-labelledby="tabExploreBtn" hidden>
                 <div class="place-row">
                     <div class="place-field">
-                        <input type="text" id="placeInput" placeholder="輸入地址，例如北角英皇道321號" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
+                        <input type="text" id="placeInput" placeholder="輸入想去嘅位置，例如柴灣康民街" autocomplete="off" enterkeyhint="search" aria-label="輸入想去嘅位置">
                         <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入地址" aria-label="語音輸入地址">🎤</button>
                     </div>
                     <div class="place-actions">
@@ -193,7 +193,7 @@
                         <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
                     </div>
                 </div>
-                <div class="quick-hint" id="nearbyHint">輸入地址後會先精準定位，再列出附近約五至十分鐘步行可乘搭嘅巴士路線</div>
+                <div class="quick-hint" id="nearbyHint">輸入想去嘅位置，會用而家定位搵附近行得到、可以去到嗰度嘅路線</div>
                 <div id="nearbyResults" class="nearby-results" hidden></div>
             </div>
             <div id="voiceBar" class="voice-bar" hidden>
@@ -763,6 +763,52 @@
                                     routeId: (stop.routeIds && stop.routeIds[route]) ? String(stop.routeIds[route]) : '',
                                     dist: stop.dist,
                                     walkMins: stop.walkMins != null ? stop.walkMins : this.walkMins(stop.dist)
+                                });
+                            }
+                        }
+                    }
+                    return [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                },
+                routesToDestination(originLat, originLng, destLat, destLng, radiusM) {
+                    const radius = radiusM || CONFIG.UI.nearbyRadiusM;
+                    const originStops = this.findNearby(originLat, originLng, radius, Infinity);
+                    const destStops = this.findNearby(destLat, destLng, radius, Infinity);
+                    const destByKey = new Map();
+                    for (const stop of destStops) {
+                        for (const route of stop.routes || []) {
+                            if (!route) continue;
+                            const key = `${stop.company}|${route}`;
+                            const prev = destByKey.get(key);
+                            if (!prev || stop.dist < prev.dist) destByKey.set(key, Object.assign({}, stop, { route }));
+                        }
+                    }
+                    const map = new Map();
+                    for (const stop of originStops) {
+                        for (const route of stop.routes || []) {
+                            if (!route) continue;
+                            const key = `${stop.company}|${route}`;
+                            const alight = destByKey.get(key);
+                            if (!alight) continue;
+                            if (String(alight.stopId) === String(stop.stopId)) continue;
+                            const prev = map.get(key);
+                            if (!prev || stop.dist < prev.dist) {
+                                map.set(key, {
+                                    kind: 'journey',
+                                    company: stop.company,
+                                    route,
+                                    stopId: stop.stopId,
+                                    stopName: stop.stopName,
+                                    lat: stop.lat,
+                                    lng: stop.lng,
+                                    routeId: (stop.routeIds && stop.routeIds[route]) ? String(stop.routeIds[route]) : ((alight.routeIds && alight.routeIds[route]) ? String(alight.routeIds[route]) : ''),
+                                    dist: stop.dist,
+                                    walkMins: stop.walkMins != null ? stop.walkMins : this.walkMins(stop.dist),
+                                    destStopId: alight.stopId,
+                                    destStopName: alight.stopName,
+                                    destLat: alight.lat,
+                                    destLng: alight.lng,
+                                    destDist: alight.dist,
+                                    destWalkMins: alight.walkMins != null ? alight.walkMins : this.walkMins(alight.dist)
                                 });
                             }
                         }
@@ -2615,19 +2661,36 @@
                     const co = this._companyLabel(r.company);
                     const name = StopPlates.label(r.stopName || '', r.stopId);
                     const walk = this._walkLabel(r.dist, r.walkMins);
-                    const meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
+                    const destName = r.destStopName ? StopPlates.label(r.destStopName, r.destStopId) : '';
+                    let meta;
+                    if (r.kind === 'journey') {
+                        const board = walk ? `上：${name}，${walk}` : `上：${name}`;
+                        meta = destName ? `${board} → 落：${destName}` : board;
+                    } else {
+                        meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
+                    }
                     const routeId = r.routeId || '';
-                    return `<button type="button" class="route-hit nearby-route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat}" data-lng="${r.lng}" data-route-id="${Utils.escapeHtml(routeId)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                    const dir = r.direction || '';
+                    const destId = r.destStopId || '';
+                    return `<button type="button" class="route-hit nearby-route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat}" data-lng="${r.lng}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
                 }
-                _renderNearbyRouteSection(routes, originLabel) {
+                _renderNearbyRouteSection(routes, originLabel, mode) {
                     const sec = document.createElement('div');
                     sec.className = 'result-section';
-                    const where = originLabel ? `（${originLabel}）` : '';
+                    const isJourney = mode === 'journey' || (routes && routes.some(r => r && r.kind === 'journey'));
+                    const where = originLabel ? `「${originLabel}」` : '';
                     if (!routes || !routes.length) {
-                        sec.innerHTML = `<div class="result-title">附近路線${Utils.escapeHtml(where)}</div><div class="nearby-empty">喺${Utils.escapeHtml(originLabel || '呢個位置')}${this._rangeHint()}內搵唔到巴士路線</div>`;
+                        const title = isJourney ? `由而家去${Utils.escapeHtml(where) || '目的地'}` : `附近路線${originLabel ? '（' + Utils.escapeHtml(originLabel) + '）' : ''}`;
+                        const empty = isJourney
+                            ? `附近${this._rangeHint()}內暫時搵唔到可以去到${Utils.escapeHtml(where) || '呢個位置'}嘅直達路線`
+                            : `喺${Utils.escapeHtml(originLabel || '呢個位置')}${this._rangeHint()}內搵唔到巴士路線`;
+                        sec.innerHTML = `<div class="result-title">${title}</div><div class="nearby-empty">${empty}</div>`;
                         return sec;
                     }
-                    sec.innerHTML = `<div class="result-title">附近路線${Utils.escapeHtml(where)} · 撳線即可加入關注</div>` + routes.map(r => this._nearbyRouteButtonHtml(r)).join('');
+                    const title = isJourney
+                        ? `由而家去${Utils.escapeHtml(where)} · 已按附近步行距離排序，撳線即可加入上車那站`
+                        : `附近路線${originLabel ? '（' + Utils.escapeHtml(originLabel) + '）' : ''} · 撳線即可加入關注`;
+                    sec.innerHTML = `<div class="result-title">${title}</div>` + routes.map(r => this._nearbyRouteButtonHtml(r)).join('');
                     return sec;
                 }
                 _openRouteFromHit(hit) {
@@ -2765,22 +2828,27 @@
                 async _searchNearbyByAddress() {
                     return this._searchExplore();
                 }
-                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib }) {
+                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib, journeys, destLabel }) {
                     const box = this.elements.nearbyResults;
                     box.hidden = false;
                     box.innerHTML = '';
+                    const hasJourneys = journeys && journeys.length;
                     const hasNearbyRoutes = nearbyRoutes && nearbyRoutes.length;
-                    const hasAny = hasNearbyRoutes || (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
+                    const hasAny = hasJourneys || hasNearbyRoutes || (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
                     if (!hasAny) {
                         const empty = document.createElement('div');
                         empty.className = 'nearby-empty';
-                        empty.textContent = nearbyLabel
-                            ? `喺「${nearbyLabel}」${this._rangeHint()}內搵唔到巴士路線，可改試更完整嘅地址`
-                            : '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼';
+                        empty.textContent = destLabel
+                            ? `附近${this._rangeHint()}內暫時搵唔到可以去到「${destLabel}」嘅直達路線`
+                            : (nearbyLabel
+                                ? `喺「${nearbyLabel}」${this._rangeHint()}內搵唔到巴士路線，可改試更完整嘅地址`
+                                : '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼');
                         box.appendChild(empty);
                         return;
                     }
-                    if (hasNearbyRoutes || nearbyLabel) {
+                    if (destLabel || hasJourneys) {
+                        box.appendChild(this._renderNearbyRouteSection(journeys || [], destLabel, 'journey'));
+                    } else if (hasNearbyRoutes || nearbyLabel) {
                         box.appendChild(this._renderNearbyRouteSection(nearbyRoutes || [], nearbyLabel));
                     }
                     if (routes && routes.length) {
@@ -2817,7 +2885,7 @@
                     this._switchTab('explore');
                     const raw = (this.elements.placeInput.value || '').trim();
                     if (!raw) {
-                        this.showToast('請輸入站名、地址或路線，例如佐敦');
+                        this.showToast('請輸入想去嘅位置，例如柴灣康民街');
                         this.elements.placeInput.focus();
                         return;
                     }
@@ -2833,7 +2901,7 @@
                     this._setNearbyHint(`正在搜「${raw}」…`);
                     try {
                         await NearbyIndex.ensureCore();
-                        const origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : null;
+                        let origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : null;
                         const isRouteNo = NearbyIndex.looksLikeRoute(raw);
                         let routes = isRouteNo ? await NearbyIndex.searchRoutes(raw) : [];
                         const stops = isRouteNo ? [] : NearbyIndex.searchStops(raw, origin);
@@ -2841,33 +2909,68 @@
                         let nearbyRoutes = [];
                         let nearbyLabel = '';
                         let attrib = '';
+                        let journeys = [];
+                        let destLabel = '';
                         if (!isRouteNo) {
-                            this._setNearbyHint(`正在將「${raw}」精準定位，再列出附近可乘搭路線…`);
-                            try {
-                                const geo = await Geocoder.search(raw, signal);
-                                if (geo) {
-                                    this._setNearbyHint(`已定位到「${geo.label}」，正在搵附近路線…`);
-                                    nearbyRoutes = NearbyIndex.nearbyRoutes(geo.lat, geo.lng);
-                                    nearby = NearbyIndex.findNearby(geo.lat, geo.lng);
-                                    nearbyLabel = geo.label;
-                                    attrib = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap';
+                            this._setNearbyHint(`正在定位目的地「${raw}」，再用而家位置配對可乘搭路線…`);
+                            if (!origin) {
+                                this._setNearbyHint('正在取得而家位置，等陣先至可以配對去目的地嘅路線…');
+                                try {
+                                    await this._waitForGps();
+                                } catch (e) {
+                                    if (e && e.name === 'AbortError') throw e;
+                                    this._setNearbyHint(e.message || '請先允許定位，先至可以搵由而家去目的地嘅路線。', 'error');
+                                    this.showToast(e.message || '請先允許定位');
+                                    this._renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib });
+                                    return;
                                 }
+                            }
+                            origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : origin;
+                            if (!origin) {
+                                this._setNearbyHint('請先允許定位，先至可以搵由而家去目的地、附近行得到嘅路線。', 'error');
+                                this.showToast('請先允許定位');
+                                this._renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib });
+                                return;
+                            }
+                            let dest = null;
+                            try {
+                                dest = await Geocoder.search(raw, signal);
                             } catch (e) {
                                 if (e && e.name === 'AbortError') throw e;
                             }
-                            if (!nearbyRoutes.length && !stops.length) {
+                            if (!dest && stops.length) {
+                                const hit = stops[0];
+                                dest = { lat: hit.lat, lng: hit.lng, label: hit.stopName || raw, source: 'Stop' };
+                            }
+                            if (dest) {
+                                destLabel = dest.label || raw;
+                                const hereDist = Math.round(Utils.calcDistance(origin.lat, origin.lng, dest.lat, dest.lng));
+                                if (isFinite(hereDist) && hereDist < 200) {
+                                    this._setNearbyHint(`「${destLabel}」已經好近（約 ${hereDist} 米），可能唔需要搭巴士。`, 'ok');
+                                }
+                                this._setNearbyHint(`已定位目的地「${destLabel}」，正在搵附近行得到、可以去到嘅路線…`);
+                                journeys = NearbyIndex.routesToDestination(origin.lat, origin.lng, dest.lat, dest.lng);
+                                attrib = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap';
+                            }
+                            if (!journeys.length && !stops.length) {
                                 const extra = await NearbyIndex.searchRoutes(raw);
                                 routes.push(...extra);
                             }
                         }
-                        this._renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib });
-                        const parts = [];
-                        if (nearbyRoutes.length) parts.push(`${nearbyRoutes.length} 條附近路線`);
-                        if (routes.length) parts.push(`${routes.length} 條相符路線`);
-                        if (stops.length) parts.push(`${stops.length} 個車站`);
-                        if (nearby.length) parts.push(`${nearby.length} 個附近站`);
-                        const located = nearbyLabel ? `已定位到「${nearbyLabel}」，` : '';
-                        this._setNearbyHint(parts.length ? `${located}搵到 ${parts.join('、')}。撳附近路線即可加入關注。` : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`, parts.length ? 'ok' : 'error');
+                        this._renderExploreResults({ routes, stops, journeys, destLabel, nearby, nearbyRoutes, nearbyLabel, attrib });
+                        if (journeys.length) {
+                            this._setNearbyHint(`已定位目的地「${destLabel}」，附近行得到、可以去到嘅路線有 ${journeys.length} 條，已按步行距離排序。撳線即可加入上車那站。`, 'ok');
+                            this._refineJourneys(journeys, signal, destLabel, { routes, stops, attrib }).catch(e => {
+                                if (e && e.name === 'AbortError') return;
+                            });
+                        } else {
+                            this._setNearbyHint(destLabel
+                                ? `已定位目的地「${destLabel}」，但附近${this._rangeHint()}內暫時搵唔到直達路線。`
+                                : (routes.length || stops.length
+                                    ? `搵到${routes.length ? ' ' + routes.length + ' 條相符路線' : ''}${stops.length ? '、' + stops.length + ' 個車站' : ''}。`
+                                    : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`),
+                                destLabel || routes.length || stops.length ? (journeys.length ? 'ok' : (destLabel ? 'error' : 'ok')) : 'error');
+                        }
                     } catch (e) {
                         if (e && e.name === 'AbortError') return;
                         this._setNearbyHint(e.message || '搜尋失敗', 'error');
@@ -2877,7 +2980,84 @@
                         btn.textContent = old;
                     }
                 }
+                _closestStopOnRoute(stops, lat, lng, maxM) {
+                    let best = null;
+                    let bestDist = Infinity;
+                    for (const s of stops || []) {
+                        const dist = Utils.calcDistance(lat, lng, s.lat, s.lng);
+                        if (!isFinite(dist) || dist > (maxM || 150)) continue;
+                        if (dist < bestDist) {
+                            best = s;
+                            bestDist = dist;
+                        }
+                    }
+                    return best;
+                }
+                async _confirmJourney(item, signal) {
+                    const stops = await BusAPI.getStops(item.company, item.route, null, signal);
+                    if (!stops || !stops.length || stops.error) return item;
+                    const byDir = { outbound: [], inbound: [] };
+                    for (const s of stops) {
+                        if (s && s.error) continue;
+                        (s.direction === 'inbound' ? byDir.inbound : byDir.outbound).push(s);
+                    }
+                    let best = null;
+                    for (const dir of ['outbound', 'inbound']) {
+                        const list = byDir[dir];
+                        if (!list.length) continue;
+                        let board = list.filter(s => String(s.stopId) === String(item.stopId)).sort((a, b) => a.seq - b.seq)[0];
+                        let alight = list.filter(s => String(s.stopId) === String(item.destStopId)).sort((a, b) => a.seq - b.seq)[0];
+                        if (!board) board = this._closestStopOnRoute(list, item.lat, item.lng, 150);
+                        if (!alight) alight = this._closestStopOnRoute(list, item.destLat, item.destLng, 150);
+                        if (!board || !alight) continue;
+                        if (!(board.seq < alight.seq)) continue;
+                        const cand = Object.assign({}, item, {
+                            direction: dir,
+                            stopId: board.stopId,
+                            stopName: board.stopName || item.stopName,
+                            lat: board.lat || item.lat,
+                            lng: board.lng || item.lng,
+                            seq: board.seq,
+                            destStopId: alight.stopId,
+                            destStopName: alight.stopName || item.destStopName,
+                            destLat: alight.lat || item.destLat,
+                            destLng: alight.lng || item.destLng,
+                            destSeq: alight.seq
+                        });
+                        if (!best || (alight.seq - board.seq) < (best.destSeq - best.seq)) best = cand;
+                    }
+                    return best;
+                }
+                async _refineJourneys(items, signal, destLabel, extra) {
+                    const cap = (items || []).slice(0, 20);
+                    const tasks = cap.map(item => async () => {
+                        try {
+                            return await this._confirmJourney(item, signal);
+                        } catch (e) {
+                            if (e && e.name === 'AbortError') throw e;
+                            return item;
+                        }
+                    });
+                    const raw = await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
+                    if (signal && signal.aborted) return;
+                    const confirmed = [];
+                    for (let i = 0; i < raw.length; i++) {
+                        const row = raw[i];
+                        if (!row || row.error) {
+                            if (cap[i]) confirmed.push(cap[i]);
+                            continue;
+                        }
+                        confirmed.push(row);
+                    }
+                    confirmed.sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    this._renderExploreResults(Object.assign({}, extra || {}, { journeys: confirmed, destLabel }));
+                    this._setNearbyHint(confirmed.length
+                        ? `已定位目的地「${destLabel}」，附近行得到、可以去到嘅路線有 ${confirmed.length} 條，已按步行距離排序。撳線即可加入上車那站。`
+                        : `已定位目的地「${destLabel}」，核對方向後暫時搵唔到直達路線。`,
+                        confirmed.length ? 'ok' : 'error');
+                }
                 async _addNearbyChip(chip) {
+
                     if (!chip || chip.disabled) return;
                     const company = chip.dataset.company;
                     const route = chip.dataset.route;
@@ -2888,11 +3068,13 @@
                     const routeId = chip.dataset.routeId || null;
                     chip.disabled = true;
                     try {
-                        const stops = await BusAPI.getStops(company, route);
-                        const matches = stops.filter(s => String(s.stopId) === String(stopId));
+                        const wantDir = chip.dataset.direction || null;
+                        const stops = await BusAPI.getStops(company, route, wantDir || null);
+                        let matches = (stops || []).filter(s => s && !s.error && String(s.stopId) === String(stopId));
+                        if (wantDir) matches = matches.filter(s => s.direction === wantDir);
                         const picked = matches.length ? matches : [{
                             company, route, stopId, stopName, lat, lng,
-                            direction: 'outbound', seq: 0, serviceType: 1, routeId
+                            direction: wantDir || 'outbound', seq: 0, serviceType: 1, routeId
                         }];
                         let added = 0, existed = 0;
                         for (const s of picked) {
