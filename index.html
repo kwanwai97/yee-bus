@@ -244,9 +244,9 @@
                     nearbyMinRadiusM: 300,
                     nearbyMaxStops: 40,
                     mtrWalkM: 800,
-                    transferWalkM: 250,
+                    transferWalkM: 400,
                     transferLinkWalkM: 400,
-                    transferMaxOriginRoutes: 10,
+                    transferMaxOriginRoutes: 12,
                     transferMaxDestRoutes: 10,
                     transferMaxMidRoutes: 8
                 },
@@ -3137,6 +3137,7 @@
                     this._setNearbyHint(`正在搜「${raw}」…`);
                     try {
                         await NearbyIndex.ensureCore();
+                        try { await NearbyIndex.loadNLB(); } catch (e) { if (e && e.name === 'AbortError') throw e; }
                         let origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : null;
                         const isRouteNo = NearbyIndex.looksLikeRoute(raw);
                         let routes = isRouteNo ? await NearbyIndex.searchRoutes(raw) : [];
@@ -3350,6 +3351,43 @@
                     if (!hit) return null;
                     return Object.assign({ stop }, hit);
                 }
+                _connectingOriginRoutes(origin, destRoutes, xferM, cap) {
+                    const originAll = this._topNearbyRoutes(origin.lat, origin.lng, Infinity);
+                    if (!originAll.length || !destRoutes.length) return [];
+                    const destKeys = new Set(destRoutes.map(r => this._routeKey(r.company, r.route)));
+                    const originKeys = new Set(originAll.map(r => this._routeKey(r.company, r.route)));
+                    const destPts = [];
+                    const originPts = new Map();
+                    for (const s of NearbyIndex.collectStops()) {
+                        for (const route of s.routes || []) {
+                            const key = this._routeKey(s.company, route);
+                            if (destKeys.has(key)) destPts.push({ lat: s.lat, lng: s.lng });
+                            if (originKeys.has(key)) {
+                                const arr = originPts.get(key) || [];
+                                arr.push({ lat: s.lat, lng: s.lng });
+                                originPts.set(key, arr);
+                            }
+                        }
+                    }
+                    const slack = xferM || 400;
+                    const hits = [];
+                    for (const r of originAll) {
+                        const key = this._routeKey(r.company, r.route);
+                        const pts = originPts.get(key) || [];
+                        let best = Infinity;
+                        for (const a of pts) {
+                            for (const b of destPts) {
+                                const d = Utils.calcDistance(a.lat, a.lng, b.lat, b.lng);
+                                if (isFinite(d) && d < best) best = d;
+                                if (best <= slack) break;
+                            }
+                            if (best <= slack) break;
+                        }
+                        if (best <= slack) hits.push(r);
+                    }
+                    hits.sort((a, b) => a.dist - b.dist);
+                    return hits.slice(0, cap);
+                }
                 async _findTransfers(origin, dest, signal) {
                     if (!origin || !dest) return [];
                     const results = [];
@@ -3358,17 +3396,16 @@
                     const destCap = CONFIG.UI.transferMaxDestRoutes || 10;
                     const originCap = CONFIG.UI.transferMaxOriginRoutes || 10;
                     const linkM = CONFIG.UI.transferLinkWalkM || 400;
-                    const xferM = CONFIG.UI.transferWalkM || 250;
+                    const xferM = CONFIG.UI.transferWalkM || 400;
 
                     const destRoutes = this._topNearbyRoutes(dest.lat, dest.lng, destCap);
-                    const originRoutes = this._topNearbyRoutes(origin.lat, origin.lng, originCap);
+                    const originNear = this._topNearbyRoutes(origin.lat, origin.lng, originCap);
+                    const originConnect = this._connectingOriginRoutes(origin, destRoutes, xferM, Math.max(originCap, 12));
 
                     // 巴士 → 地鐵，或地鐵 → 巴士，或巴士 → 地鐵 → 巴士
-                    const needDestLists = destRoutes.length && !destMtr;
-                    const needOriginLists = originRoutes.length && !originMtr;
-                    const destLists = needDestLists || destRoutes.length ? await this._stopListsForRoutes(destRoutes, signal) : [];
+                    const destLists = destRoutes.length ? await this._stopListsForRoutes(destRoutes, signal) : [];
                     if (signal && signal.aborted) return results;
-                    const originLists = needOriginLists ? await this._stopListsForRoutes(originRoutes, signal) : [];
+                    const originLists = (!originMtr && originNear.length) ? await this._stopListsForRoutes(originNear, signal) : [];
                     if (signal && signal.aborted) return results;
 
                     if (originMtr && !destMtr) {
@@ -3455,19 +3492,15 @@
                         }
                     }
 
-                    // 已有地鐵轉巴士或巴士轉地鐵就唔再搵巴士互轉，避免加重手機負擔
-                    if (results.length) return this._dedupeTransfers(results);
-
-                    // 巴士轉巴士（一轉）；仍冇結果先至做最多兩轉
-                    const originPacks = originLists.length ? originLists : await this._stopListsForRoutes(originRoutes, signal);
+                    // 即使已有地鐵轉巴士，都照樣搵一轉巴士，因為有時巴士互轉更快（例如 E22A 轉嶼巴 11）
+                    const originPacks = originConnect.length ? await this._stopListsForRoutes(originConnect, signal) : [];
                     if (signal && signal.aborted) return this._dedupeTransfers(results);
-                    const destPacks = destLists.length ? destLists : await this._stopListsForRoutes(destRoutes, signal);
-                    if (signal && signal.aborted) return this._dedupeTransfers(results);
-
+                    const destPacks = destLists;
                     const one = this._busBusOneTransfer(origin, dest, originPacks, destPacks, xferM);
                     results.push(...one);
-                    if (!one.length) {
-                        const mid = await this._busBusTwoTransfers(origin, dest, originPacks, destPacks, xferM, signal);
+                    if (!results.length) {
+                        const midOrigin = originPacks.length ? originPacks : originLists;
+                        const mid = await this._busBusTwoTransfers(origin, dest, midOrigin, destPacks, xferM, signal);
                         results.push(...mid);
                     }
                     return this._dedupeTransfers(results);
