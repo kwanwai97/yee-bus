@@ -161,7 +161,7 @@
                     walkSpeedMpm: 75,
                     maxETAShow: 3,
                     nearestDistanceThreshold: 2000, // 放宽至2公里
-                    maxConcurrentRequests: 5,
+                    maxConcurrentRequests: 6,
                     fetchTimeoutMs: 12000
                 },
                 CACHE: {
@@ -286,6 +286,7 @@
                     this.ttl = ttl;
                     this.store = new Map();
                     this.storageKey = storageKey;
+                    this._persistTimer = null;
                     if (storageKey) {
                         try {
                             const saved = localStorage.getItem(storageKey);
@@ -303,16 +304,31 @@
                     if (!entry) return null;
                     if (Date.now() - entry.timestamp > this.ttl) {
                         this.store.delete(key);
-                        if (this.storageKey) this._persist();
+                        if (this.storageKey) this._schedulePersist();
                         return null;
                     }
                     return entry.value;
                 }
                 set(key, value) {
                     this.store.set(key, { value, timestamp: Date.now() });
-                    if (this.storageKey) this._persist();
+                    if (this.storageKey) this._schedulePersist();
                 }
-                clear() { this.store.clear(); if (this.storageKey) { localStorage.removeItem(this.storageKey); } }
+                clear() {
+                    this.store.clear();
+                    if (this._persistTimer) {
+                        clearTimeout(this._persistTimer);
+                        this._persistTimer = null;
+                    }
+                    if (this.storageKey) localStorage.removeItem(this.storageKey);
+                }
+                _schedulePersist() {
+                    if (!this.storageKey) return;
+                    if (this._persistTimer) clearTimeout(this._persistTimer);
+                    this._persistTimer = setTimeout(() => {
+                        this._persistTimer = null;
+                        this._persist();
+                    }, 1000);
+                }
                 _persist() {
                     if (!this.storageKey) return;
                     try {
@@ -367,7 +383,45 @@
                 }
             }
 
-            // ========== 九巴／龍運站牌編號（官方 ETA API 沒有此欄，用公開站點清單對照 stopId） ==========
+            // ========== 九巴／龍運站點清單（一次過載入：站名座標 + 路牌編號共用） ==========
+            const KMBStops = {
+                _map: Object.create(null),
+                _ready: null,
+                load() {
+                    if (this._ready) return this._ready;
+                    this._ready = this._load();
+                    return this._ready;
+                },
+                async _load() {
+                    try {
+                        const json = await Fetcher.fetchJSON(CONFIG.API.KMB_STOP_PLATES, { timeoutMs: 25000 });
+                        const entries = (json && typeof json === 'object' && !Array.isArray(json))
+                            ? Object.values(json)
+                            : (Array.isArray(json) ? json : []);
+                        const map = Object.create(null);
+                        for (const d of entries) {
+                            if (!d || !d.stop) continue;
+                            map[String(d.stop)] = {
+                                stop: String(d.stop),
+                                name_tc: d.name_tc || '',
+                                name_en: d.name_en || '',
+                                lat: d.lat,
+                                long: d.long
+                            };
+                        }
+                        this._map = map;
+                    } catch (e) {
+                        console.warn('載入九巴站點清單失敗，將回退逐站請求:', e);
+                        this._map = Object.create(null);
+                    }
+                },
+                get(stopId) {
+                    if (!stopId) return null;
+                    return this._map[String(stopId)] || null;
+                }
+            };
+
+            // ========== 九巴／龍運站牌編號（官方 ETA API 沒有此欄，用同一份公開站點清單對照 stopId） ==========
             const StopPlates = {
                 _map: Object.create(null),
                 _ready: null,
@@ -386,23 +440,26 @@
                     } catch (e) {}
                     return null;
                 },
+                _buildPlateMapFromStops() {
+                    const map = Object.create(null);
+                    for (const id of Object.keys(KMBStops._map)) {
+                        const d = KMBStops._map[id];
+                        const m = this.PLATE_RE.exec(String(d.name_tc || d.name_en || ''));
+                        if (m) map[id] = m[1];
+                    }
+                    return map;
+                },
                 async _load() {
                     const cached = this._readCache();
                     if (cached && cached.ts && (Date.now() - cached.ts) < this.TTL_MS) {
                         this._map = cached.map;
+                        // 路牌有快取時仍預熱站點清單，加速之後搜尋
+                        KMBStops.load().catch(() => {});
                         return;
                     }
                     try {
-                        const json = await Fetcher.fetchJSON(CONFIG.API.KMB_STOP_PLATES, { timeoutMs: 25000 });
-                        const entries = (json && typeof json === 'object' && !Array.isArray(json))
-                            ? Object.values(json)
-                            : (Array.isArray(json) ? json : []);
-                        const map = Object.create(null);
-                        for (const d of entries) {
-                            if (!d || !d.stop) continue;
-                            const m = this.PLATE_RE.exec(String(d.name_tc || d.name_en || ''));
-                            if (m) map[d.stop] = m[1];
-                        }
+                        await KMBStops.load();
+                        const map = this._buildPlateMapFromStops();
                         if (Object.keys(map).length > 0) {
                             this._map = map;
                             try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ ts: Date.now(), map })); } catch (e) {}
@@ -505,6 +562,12 @@
                         route
                     }));
                     routeCache.set(cacheKey, normalized);
+                    if (!direction) {
+                        const outbound = normalized.filter(s => s.direction === 'outbound');
+                        const inbound = normalized.filter(s => s.direction === 'inbound');
+                        if (outbound.length) routeCache.set(`${company}:${route}:outbound`, outbound);
+                        if (inbound.length) routeCache.set(`${company}:${route}:inbound`, inbound);
+                    }
                     return normalized;
                 }
 
@@ -523,6 +586,7 @@
                     return (bound === 'I' || bound === 'inbound') ? 'inbound' : 'outbound';
                 }
                 static async _fetchKMBStops(route, direction, signal) {
+                    await KMBStops.load();
                     const variants = await this._getKMBRouteVariants(route, signal);
                     let pairs = [];
                     if (variants.length > 0) {
@@ -540,20 +604,36 @@
                         const dirs = direction ? [direction] : ['outbound', 'inbound'];
                         pairs = dirs.map(dir => ({ dir, serviceType: '1', dest_tc: '', orig_tc: '' }));
                     }
-                    let all = [];
-                    for (const p of pairs) {
+                    const pairResults = await Promise.all(pairs.map(async (p) => {
                         const url = `${CONFIG.API.KMB}/route-stop/${route}/${p.dir}/${p.serviceType}`;
                         const json = await Fetcher.fetchJSON(url, { signal });
-                        const data = json.data || [];
-                        const stopIds = data.map(item => item.stop);
-                        const details = await Utils.parallelLimit(
-                            stopIds.map(id => () => this._getKMBStopDetail(id, signal)),
-                            5
+                        return { p, data: json.data || [] };
+                    }));
+                    const missing = [];
+                    const seenMiss = new Set();
+                    for (const { data } of pairResults) {
+                        for (const item of data) {
+                            const id = item && item.stop;
+                            if (!id) continue;
+                            if (KMBStops.get(id) || stopCache.get(`KMB:stop:${id}`)) continue;
+                            if (seenMiss.has(id)) continue;
+                            seenMiss.add(id);
+                            missing.push(id);
+                        }
+                    }
+                    if (missing.length > 0) {
+                        await Utils.parallelLimit(
+                            missing.map(id => () => this._getKMBStopDetail(id, signal)),
+                            8
                         );
-                        data.forEach((item, i) => {
-                            const stopInfo = details[i] || {};
+                    }
+                    const all = [];
+                    for (const { p, data } of pairResults) {
+                        for (const item of data) {
+                            const id = item.stop;
+                            const stopInfo = KMBStops.get(id) || stopCache.get(`KMB:stop:${id}`) || {};
                             all.push({
-                                stopId: item.stop,
+                                stopId: id,
                                 seq: parseInt(item.seq, 10) || 0,
                                 direction: p.dir,
                                 serviceType: item.service_type || p.serviceType,
@@ -563,7 +643,7 @@
                                 variantDest: p.dest_tc || '',
                                 variantOrig: p.orig_tc || ''
                             });
-                        });
+                        }
                     }
                     return all;
                 }
@@ -683,13 +763,15 @@
                     const matchedRoutes = routes.filter(r => r.routeNo.toUpperCase() === route.toUpperCase());
                     if (matchedRoutes.length === 0) throw new Error(`找不到嶼巴路線 ${route}`);
                     const dirMap = this._inferNLBDirections(matchedRoutes);
-                    let allStops = [];
-                    for (const rItem of matchedRoutes) {
+                    const lists = await Promise.all(matchedRoutes.map(async (rItem) => {
                         const routeId = rItem.routeId;
                         const meta = dirMap.get(routeId) || { direction: 'outbound', variantOrig: '', variantDest: '', serviceType: 1 };
                         const stopUrl = `${CONFIG.API.NLB}/stop.php?action=list&routeId=${routeId}`;
                         const stopJson = await Fetcher.fetchJSON(stopUrl, { signal });
-                        const stops = stopJson.stops || [];
+                        return { routeId, meta, stops: stopJson.stops || [] };
+                    }));
+                    const allStops = [];
+                    for (const { routeId, meta, stops } of lists) {
                         stops.forEach((s, idx) => {
                             allStops.push({
                                 stopId: s.stopId,
@@ -1103,7 +1185,12 @@
                             this._updateQuickButtonState();
                             this._updateHint();
                             this._updateLocateButtonState();
-                            this.fetchETA();
+                            // GPS 可能數秒更新一次；到站時間已有定時刷新，唔使每次定位都重拉
+                            const now = Date.now();
+                            if (!this._lastGpsEtaAt || (now - this._lastGpsEtaAt) >= 8000) {
+                                this._lastGpsEtaAt = now;
+                                this.fetchETA();
+                            }
                         });
                     });
                     this.fetchETA();
@@ -1112,7 +1199,8 @@
                         if (this.currentStops && this.currentStops.length) this._populateStationSelect(this.currentStops);
                         this.fetchETA();
                     });
-                    // 預載城巴全站清單，令第一次搜尋城巴唔使等逐站請求
+                    // 預載九巴／城巴全站清單，令第一次搜尋唔使等逐站請求
+                    KMBStops.load().catch(() => {});
                     CTBStops.load().catch(() => {});
                 }
 
