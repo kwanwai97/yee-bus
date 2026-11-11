@@ -192,12 +192,69 @@
                 debounce(fn, delay) { let timer = null; return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), delay); }; },
                 sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
                 getNLBStopName(stop, index) {
-                    const candidates = ['stopName_tc', 'stopName_en', 'name_tc', 'stop_name_tc', 'stopName', 'name', 'stop_name', 'stopNameZh', 'nameZh', 'stopName_zh', 'stop_name_zh', 'stopNameTC', 'stopName_Tc'];
+                    const candidates = ['stopName_c', 'stopName_tc', 'stopName_s', 'stopName_en', 'name_tc', 'stop_name_tc', 'stopName', 'name', 'stop_name', 'stopNameZh', 'nameZh', 'stopName_zh', 'stop_name_zh', 'stopNameTC', 'stopName_Tc'];
                     for (const key of candidates)
                         if (stop[key] && typeof stop[key] === 'string' && stop[key].trim() !== '') return stop[key].trim();
                     for (const key in stop)
                         if (typeof stop[key] === 'string' && stop[key].trim() !== '' && !/^\d+$/.test(stop[key]) && stop[key].length > 1) return stop[key].trim();
                     return `第 ${index+1} 站`;
+                },
+                stripPlateFromName(name, plate) {
+                    let text = String(name || '').trim();
+                    if (plate) {
+                        const esc = String(plate).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        text = text.replace(new RegExp('\\s*[（(]' + esc + '[）)]\\s*$'), '').trim();
+                    } else {
+                        text = text.replace(/\s*[（(][A-Z]{1,3}\d{2,4}[A-Z]?[）)]\s*$/, '').trim();
+                    }
+                    return text;
+                },
+                // 同一方向若有普通班＋特別班，只保留主線站，並補上特別班獨有的站，避免清單重複
+                foldStopsForDisplay(stops) {
+                    const empty = { outbound: [], inbound: [] };
+                    if (!stops || !stops.length) return empty;
+                    const byDir = { outbound: [], inbound: [] };
+                    for (const s of stops) {
+                        (s.direction === 'inbound' ? byDir.inbound : byDir.outbound).push(s);
+                    }
+                    const fold = (list) => {
+                        if (!list.length) return [];
+                        const groups = new Map();
+                        for (const s of list) {
+                            const key = (s.company === 'NLB') ? `id:${s.routeId || ''}` : `st:${s.serviceType || 1}`;
+                            if (!groups.has(key)) groups.set(key, []);
+                            groups.get(key).push(s);
+                        }
+                        let primaryKey;
+                        if (list[0].company === 'NLB') {
+                            const keys = [...groups.keys()];
+                            keys.sort((a, b) => {
+                                const ga = groups.get(a), gb = groups.get(b);
+                                const ra = ga.some(s => String(s.serviceType || 1) === '1') ? 0 : 1;
+                                const rb = gb.some(s => String(s.serviceType || 1) === '1') ? 0 : 1;
+                                if (ra !== rb) return ra - rb;
+                                return gb.length - ga.length;
+                            });
+                            primaryKey = keys[0];
+                        } else {
+                            primaryKey = groups.has('st:1') ? 'st:1' : [...groups.keys()].sort()[0];
+                        }
+                        const primary = (groups.get(primaryKey) || []).slice().sort((a, b) => a.seq - b.seq);
+                        const seen = new Set(primary.map(s => String(s.stopId)));
+                        const extras = [];
+                        for (const [key, group] of groups) {
+                            if (key === primaryKey) continue;
+                            for (const s of group.slice().sort((a, b) => a.seq - b.seq)) {
+                                const id = String(s.stopId);
+                                if (!seen.has(id)) {
+                                    seen.add(id);
+                                    extras.push(s);
+                                }
+                            }
+                        }
+                        return primary.concat(extras);
+                    };
+                    return { outbound: fold(byDir.outbound), inbound: fold(byDir.inbound) };
                 },
                 async parallelLimit(tasks, limit) {
                     const results = new Array(tasks.length);
@@ -267,7 +324,7 @@
             }
 
             const stopCache = new Cache(CONFIG.CACHE.stopTTL, 'bus_stop_cache');
-            const routeCache = new Cache(CONFIG.CACHE.routeTTL, 'bus_route_cache');
+            const routeCache = new Cache(CONFIG.CACHE.routeTTL, 'bus_route_cache_v2');
 
             // ========== 資料獲取器 ==========
             class Fetcher {
@@ -401,6 +458,8 @@
                         lng: s.lng || 0,
                         serviceType: s.serviceType || 1,
                         routeId: s.routeId || null,
+                        variantOrig: s.variantOrig || '',
+                        variantDest: s.variantDest || '',
                         company,
                         route
                     }));
@@ -515,7 +574,44 @@
                     return data;
                 }
 
-                // ★ 修复：获取所有关联 routeId 的站点（去程/回程/特别班次）
+                // 嶼巴公開資料沒有 bound 欄，用路線名稱「起點 > 終點」判斷去程／回程
+                static _parseNLBName(name) {
+                    const text = String(name || '');
+                    const parts = text.split(/\s*>\s*/);
+                    if (parts.length >= 2) return { orig: parts[0].trim(), dest: parts.slice(1).join(' > ').trim() };
+                    return { orig: '', dest: text.trim() };
+                }
+                static _nlbCore(name) {
+                    return String(name || '').replace(/[（(][^）)]*[）)]/g, '').replace(/\s+/g, '').trim();
+                }
+                static _inferNLBDirections(matchedRoutes) {
+                    const parsed = matchedRoutes.map(r => {
+                        const { orig, dest } = this._parseNLBName(r.routeName_c || r.routeName_e || '');
+                        const special = Number(r.specialRoute) === 1 || /[（(][^）)]*開[）)]/.test(orig);
+                        return { r, orig, dest, coreOrig: this._nlbCore(orig), coreDest: this._nlbCore(dest), special };
+                    });
+                    const regular = parsed.filter(p => !p.special);
+                    const base = regular[0] || parsed[0];
+                    const outOrig = base ? base.coreOrig : '';
+                    const outDest = base ? base.coreDest : '';
+                    const map = new Map();
+                    for (const p of parsed) {
+                        let direction = 'outbound';
+                        if (p.coreOrig === outOrig && p.coreDest === outDest) direction = 'outbound';
+                        else if (p.coreOrig === outDest && p.coreDest === outOrig) direction = 'inbound';
+                        else if (p.coreDest === outDest || p.coreOrig === outOrig) direction = 'outbound';
+                        else if (p.coreDest === outOrig || p.coreOrig === outDest) direction = 'inbound';
+                        const mainOrig = direction === 'outbound' ? outOrig : outDest;
+                        const isVariant = p.special || p.coreOrig !== mainOrig;
+                        map.set(p.r.routeId, {
+                            direction,
+                            variantOrig: p.orig,
+                            variantDest: p.dest,
+                            serviceType: isVariant ? 2 : 1
+                        });
+                    }
+                    return map;
+                }
                 static async _fetchNLBStops(route, signal) {
                     const listCacheKey = 'NLB:routeList';
                     let listJson = routeCache.get(listCacheKey);
@@ -527,10 +623,11 @@
                     const routes = listJson.routes || [];
                     const matchedRoutes = routes.filter(r => r.routeNo.toUpperCase() === route.toUpperCase());
                     if (matchedRoutes.length === 0) throw new Error(`找不到嶼巴路線 ${route}`);
+                    const dirMap = this._inferNLBDirections(matchedRoutes);
                     let allStops = [];
                     for (const rItem of matchedRoutes) {
                         const routeId = rItem.routeId;
-                        const direction = (rItem.direction && rItem.direction.includes('Inbound')) ? 'inbound' : 'outbound';
+                        const meta = dirMap.get(routeId) || { direction: 'outbound', variantOrig: '', variantDest: '', serviceType: 1 };
                         const stopUrl = `${CONFIG.API.NLB}/stop.php?action=list&routeId=${routeId}`;
                         const stopJson = await Fetcher.fetchJSON(stopUrl, { signal });
                         const stops = stopJson.stops || [];
@@ -538,40 +635,102 @@
                             allStops.push({
                                 stopId: s.stopId,
                                 seq: idx + 1,
-                                direction: direction,
+                                direction: meta.direction,
+                                serviceType: meta.serviceType,
                                 stopName: Utils.getNLBStopName(s, idx),
                                 lat: parseFloat(s.latitude) || 0,
                                 lng: parseFloat(s.longitude) || 0,
-                                routeId: routeId
+                                routeId: routeId,
+                                variantOrig: meta.variantOrig,
+                                variantDest: meta.variantDest
                             });
                         });
                     }
                     return allStops;
                 }
 
+                static _cachedRouteStops(company, route, direction) {
+                    return routeCache.get(`${company}:${route}:all`)
+                        || (direction ? routeCache.get(`${company}:${route}:${direction}`) : null)
+                        || [];
+                }
+                static _dedupeArrivals(arrivals) {
+                    const list = (arrivals || []).filter(a => a && (a.eta || a.mins >= 0));
+                    list.sort((a, b) => {
+                        const ta = (a.eta instanceof Date && !isNaN(a.eta)) ? a.eta.getTime() : (Number(a.mins) * 60000);
+                        const tb = (b.eta instanceof Date && !isNaN(b.eta)) ? b.eta.getTime() : (Number(b.mins) * 60000);
+                        return ta - tb;
+                    });
+                    const out = [];
+                    const seen = new Set();
+                    for (const a of list) {
+                        const t = (a.eta instanceof Date && !isNaN(a.eta)) ? a.eta.getTime() : `m${a.mins}`;
+                        const key = `${t}|${a.dest_tc || ''}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        out.push(a);
+                    }
+                    return out;
+                }
                 static async getETA(watchItem) {
-                    const { company, route, stopId, serviceType, direction, seq, routeId } = watchItem;
-                    let url = '';
-                    if (company === 'KMB') url = `${CONFIG.API.KMB}/eta/${stopId}/${route}/${serviceType||1}`;
-                    else if (company === 'CTB') url = `${CONFIG.API.CTB}/eta/CTB/${stopId}/${route}`;
-                    else if (company === 'NLB') {
-                        if (!routeId) {
-                            const cached = routeCache.get(`NLB:${route}:all`);
-                            if (cached && cached.length > 0) {
-                                const found = cached.find(s => s.stopId === stopId);
-                                if (found && found.routeId) { watchItem.routeId = found.routeId; }
+                    const { company, route, stopId, serviceType, direction } = watchItem;
+                    if (company === 'KMB') {
+                        const cached = this._cachedRouteStops('KMB', route, direction);
+                        const types = new Set([String(serviceType || 1)]);
+                        for (const s of cached) {
+                            if (String(s.stopId) === String(stopId) && (!direction || s.direction === direction)) {
+                                types.add(String(s.serviceType || 1));
+                            }
+                        }
+                        const tasks = [...types].map(st => async () => {
+                            const match = cached.find(s => String(s.stopId) === String(stopId) && String(s.serviceType || 1) === String(st) && (!direction || s.direction === direction));
+                            const item = Object.assign({}, watchItem, { serviceType: st, seq: match ? match.seq : watchItem.seq });
+                            const json = await Fetcher.fetchJSON(`${CONFIG.API.KMB}/eta/${stopId}/${route}/${st}`);
+                            return this._parseETA(company, json, item);
+                        });
+                        const parts = await Utils.parallelLimit(tasks, 3);
+                        const merged = [];
+                        for (const part of parts) if (Array.isArray(part)) merged.push(...part);
+                        return this._dedupeArrivals(merged).slice(0, CONFIG.UI.maxETAShow);
+                    }
+                    if (company === 'CTB') {
+                        const json = await Fetcher.fetchJSON(`${CONFIG.API.CTB}/eta/CTB/${stopId}/${route}`);
+                        return this._dedupeArrivals(this._parseETA(company, json, watchItem)).slice(0, CONFIG.UI.maxETAShow);
+                    }
+                    if (company === 'NLB') {
+                        const cached = this._cachedRouteStops('NLB', route, direction);
+                        let ids = [...new Set(
+                            cached
+                                .filter(s => String(s.stopId) === String(stopId) && (!direction || s.direction === direction))
+                                .map(s => s.routeId)
+                                .filter(Boolean)
+                        )];
+                        if (watchItem.routeId && !ids.some(id => String(id) === String(watchItem.routeId))) {
+                            ids.unshift(watchItem.routeId);
+                        }
+                        if (ids.length === 0) {
+                            if (cached.length > 0) {
+                                const found = cached.find(s => String(s.stopId) === String(stopId));
+                                if (found && found.routeId) watchItem.routeId = found.routeId;
                             }
                             if (!watchItem.routeId) {
                                 const stops = await this.getStops('NLB', route);
-                                const found = stops.find(s => s.stopId === stopId);
-                                if (found && found.routeId) { watchItem.routeId = found.routeId; }
-                                else { throw new Error('無法取得 NLB 路線 ID'); }
+                                const found = stops.find(s => String(s.stopId) === String(stopId));
+                                if (found && found.routeId) watchItem.routeId = found.routeId;
+                                else throw new Error('無法取得 NLB 路線 ID');
                             }
+                            ids = [watchItem.routeId];
                         }
-                        url = `${CONFIG.API.NLB}/stop.php?action=estimatedArrivals&routeId=${watchItem.routeId}&stopId=${stopId}&language=zh`;
-                    } else throw new Error('不支援的巴士公司');
-                    const json = await Fetcher.fetchJSON(url);
-                    return this._parseETA(company, json, watchItem);
+                        const tasks = ids.map(rid => async () => {
+                            const json = await Fetcher.fetchJSON(`${CONFIG.API.NLB}/stop.php?action=estimatedArrivals&routeId=${rid}&stopId=${stopId}&language=zh`);
+                            return this._parseETA(company, json, Object.assign({}, watchItem, { routeId: rid }));
+                        });
+                        const parts = await Utils.parallelLimit(tasks, 3);
+                        const merged = [];
+                        for (const part of parts) if (Array.isArray(part)) merged.push(...part);
+                        return this._dedupeArrivals(merged).slice(0, CONFIG.UI.maxETAShow);
+                    }
+                    throw new Error('不支援的巴士公司');
                 }
                 static _parseETA(company, json, watchItem) {
                     const { direction, seq } = watchItem;
@@ -589,7 +748,7 @@
                         }
                         filtered = filtered.filter(item => item.eta);
                         filtered.sort((a, b) => new Date(a.eta) - new Date(b.eta));
-                        arrivals = filtered.slice(0, CONFIG.UI.maxETAShow).map(item => {
+                        arrivals = filtered.map(item => {
                             const etaDate = new Date(item.eta);
                             const rawMins = Math.floor((etaDate - Date.now()) / 60000);
                             const mins = isNaN(rawMins) ? -1 : (rawMins < 0 ? 0 : rawMins);
@@ -597,22 +756,23 @@
                         });
                     } else if (company === 'NLB') {
                         const data = json.estimatedArrivals || [];
-                        arrivals = data.slice(0, CONFIG.UI.maxETAShow).map(item => {
+                        arrivals = data.map(item => {
                             let mins = parseInt(item.estimatedArrivalMinutes);
+                            let etaTime = item.estimatedArrivalTime ? new Date(item.estimatedArrivalTime) : null;
                             if (isNaN(mins) || mins < 0) {
-                                const etaTime = new Date(item.estimatedArrivalTime);
-                                if (!isNaN(etaTime)) { mins = Math.floor((etaTime - Date.now()) / 60000); if (mins < 0) mins = 0; } else mins = -1;
+                                if (etaTime && !isNaN(etaTime)) { mins = Math.floor((etaTime - Date.now()) / 60000); if (mins < 0) mins = 0; } else mins = -1;
                             }
                             return {
-                                eta: item.estimatedArrivalTime ? new Date(item.estimatedArrivalTime) : null,
+                                eta: (etaTime && !isNaN(etaTime)) ? etaTime : null,
                                 mins,
-                                dest_tc: item.destinationName_tc || item.destinationName || '目的地',
+                                dest_tc: item.destinationName_tc || item.destinationName || item.destinationName_c || '目的地',
                                 remark: item.rmk_tc || item.remark_tc || item.remark || ''
                             };
                         });
                     }
                     return arrivals;
                 }
+
             }
 
             // ========== GPS 管理器（完整修复版） ==========
@@ -1066,21 +1226,7 @@
                         return;
                     }
 
-                    const company = stops[0].company;
-                    let outbound = [], inbound = [];
-
-                    // 对 NLB 特别处理，因为我们已经从多个 routeId 获取了站点，需要区分方向
-                    if (company === 'NLB') {
-                        outbound = stops.filter(s => s.direction === 'outbound');
-                        inbound = stops.filter(s => s.direction === 'inbound');
-                        outbound.sort((a, b) => a.seq - b.seq);
-                        inbound.sort((a, b) => a.seq - b.seq);
-                    } else {
-                        outbound = stops.filter(s => s.direction === 'outbound');
-                        inbound = stops.filter(s => s.direction === 'inbound');
-                        outbound.sort((a, b) => a.seq - b.seq);
-                        inbound.sort((a, b) => a.seq - b.seq);
-                    }
+                    const { outbound, inbound } = Utils.foldStopsForDisplay(stops);
 
                     const getDist = (s) => this.gps.getDistance(s.lat, s.lng);
 
@@ -1089,11 +1235,11 @@
                         const dist = getDist(s);
                         const distText = isFinite(dist) ? `${Math.round(dist)}米` : '未知';
                         const seq = displaySeq !== null ? displaySeq : s.seq;
-                        const cleanName = (s.stopName || '').replace(/\s*\([^)]*\)/, '').trim();
+                        const plate = StopPlates.code(s.stopId);
+                        const cleanName = Utils.stripPlateFromName(s.stopName, plate);
                         const special = (s.serviceType && String(s.serviceType) !== '1')
                             ? `（特別${s.serviceType}${s.variantOrig ? ' · ' + s.variantOrig : ''}）`
                             : '';
-                        const plate = StopPlates.code(s.stopId);
                         const plateText = (plate && !cleanName.includes(plate)) ? ` (${plate})` : '';
                         const label = `${prefix}第 ${seq} 站: ${cleanName}${plateText}${special} (${distText})`;
                         opt.textContent = label;
@@ -1159,7 +1305,7 @@
                         inbound.forEach((s, idx) => {
                             let prefix = '';
                             if (idx === nearestIdx && nearestIdx !== -1) prefix = '📍 [最近] ';
-                            addOption(s, prefix, idx + 1);
+                            addOption(s, prefix, s.seq);
                         });
                     }
 
