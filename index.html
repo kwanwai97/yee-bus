@@ -14,12 +14,12 @@
         .header .sub-info { display: flex; justify-content: space-between; font-size: 0.7rem; color: #6c757d; margin-top: 4px; flex-wrap: wrap; }
         .header .sub-info span { background: #f8f9fa; padding: 2px 8px; border-radius: 12px; }
         .search-panel { background: #f8f9fc; border-radius: 16px; padding: 14px 12px; margin-bottom: 16px; border: 1px solid #e9ecef; }
-        .input-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-        .input-row select, .input-row input { padding: 10px 12px; border: 1px solid #ced4da; border-radius: 10px; font-size: 0.95rem; background-color: #fff; transition: border-color 0.2s; }
+        .input-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: nowrap; align-items: stretch; }
+        .input-row select, .input-row input { padding: 10px 8px; border: 1px solid #ced4da; border-radius: 10px; font-size: 0.95rem; background-color: #fff; transition: border-color 0.2s; }
         .input-row select:focus, .input-row input:focus { border-color: #4dabf7; outline: none; box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25); }
-        .input-row select { flex: 0 0 auto; min-width: 80px; font-weight: 600; }
-        .input-row input { flex: 0 0 auto; min-width: 80px; max-width: 90px; text-transform: uppercase; }
-        .input-row .dir-chip { flex: 1 1 auto; min-width: 50px; }
+        .input-row select { flex: 0 0 68px; width: 68px; min-width: 62px; max-width: 72px; font-weight: 600; padding-left: 6px; padding-right: 4px; }
+        .input-row input { flex: 0 0 64px; min-width: 56px; max-width: 72px; text-transform: uppercase; text-align: center; }
+        .input-row .dir-chip { flex: 1 1 0; min-width: 0; width: auto; }
         .btn-group { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
         .btn-group .btn { flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; min-width: 80px; }
         .btn-group .btn:active { transform: scale(0.97); }
@@ -40,7 +40,7 @@
         .btn-locate:not(:disabled):hover { background: #cc6a00; }
         .btn-locate:disabled { background: #adb5bd; }
         .btn-locate.locating { background: #1c7ed6; animation: pulse 1s infinite; }
-        .dir-chip { padding: 0; border: none; border-radius: 8px; font-weight: 700; font-size: 0.85rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; flex: 0 0 auto; min-width: 78px; text-align: center; line-height: 41px; height: 41px; letter-spacing: 0.5px; }
+        .dir-chip { padding: 0 4px; border: none; border-radius: 8px; font-weight: 700; font-size: 0.82rem; color: #fff; cursor: pointer; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; flex: 1 1 0; min-width: 0; text-align: center; line-height: 1.15; height: 41px; letter-spacing: 0; display: flex; align-items: center; justify-content: center; }
         .dir-chip:active { transform: scale(0.95); }
         .dir-chip.btn-outbound { background: #2b8a3e; }
         .dir-chip.btn-inbound { background: #1c7ed6; }
@@ -81,7 +81,7 @@
         .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
         .loading-dots::after { content: '...'; animation: dots 1.2s steps(3, end) infinite; }
         @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
-        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .route-field input { max-width: none; font-size: 0.85rem; } .search-tab { font-size: 0.8rem; padding: 7px 6px; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-name { font-size: 1.05rem; } .route-left { width: 44px; } .route-dest { font-size: 0.72rem; } .station-name { font-size: 0.66rem; } .walk-info { font-size: 0.64rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
+        @media (max-width: 400px) { .input-row { gap: 5px; } .input-row select { flex-basis: 58px; width: 58px; min-width: 54px; max-width: 62px; font-size: 0.75rem; } .input-row input { min-width: 50px; max-width: 62px; font-size: 0.8rem; } .input-row .route-field, .input-row .route-field input { flex: 0 0 56px; width: 56px; min-width: 50px; max-width: 62px; font-size: 0.8rem; } .search-tab { font-size: 0.8rem; padding: 7px 6px; } .input-row .dir-chip { font-size: 0.72rem; padding: 0 2px; border-radius: 8px; } .route-name { font-size: 1.05rem; } .route-left { width: 44px; } .route-dest { font-size: 0.72rem; } .station-name { font-size: 0.66rem; } .walk-info { font-size: 0.64rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #212529; color: #fff; padding: 10px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); z-index: 999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; max-width: 90%; }
         .toast.show { opacity: 1; }
         .quick-hint { font-size: 0.7rem; color: #6c757d; margin-top: 4px; text-align: right; min-height: 1.2rem; transition: color 0.3s; cursor: pointer; }
@@ -121,8 +121,8 @@
         .search-tab { flex: 1; border: none; background: transparent; padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 0.88rem; color: #495057; cursor: pointer; line-height: 1.2; }
         .search-tab.active { background: #fff; color: #1a1a2e; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
         .tab-panel[hidden] { display: none !important; }
-        .input-row .route-field { flex: 1 1 110px; display: flex; gap: 6px; min-width: 0; align-items: stretch; }
-        .input-row .route-field input { flex: 1 1 auto; min-width: 0; max-width: none; }
+        .input-row .route-field { flex: 0 0 64px; width: 64px; min-width: 56px; max-width: 72px; display: flex; align-items: stretch; }
+        .input-row .route-field input { flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; }
         .voice-btn { flex: 0 0 41px; width: 41px; height: 41px; padding: 0; border: 1px solid #ced4da; border-radius: 10px; background: #fff; cursor: pointer; font-size: 1.05rem; line-height: 1; color: #495057; }
         .voice-btn:hover { background: #f1f3f5; }
         .voice-btn.listening { background: #c92a2a; border-color: #c92a2a; color: #fff; animation: pulse 1s infinite; }
@@ -169,8 +169,8 @@
                     <div class="route-field">
                         <input type="text" id="routeInput" placeholder="路線" autocomplete="off" enterkeyhint="search" inputmode="numeric" aria-label="路線號碼">
                     </div>
-                    <button class="dir-chip btn-outbound" id="expandOutBtn">🟢 正向</button>
-                    <button class="dir-chip btn-inbound" id="expandInBtn">🔵 反向</button>
+                    <button class="dir-chip btn-outbound" id="expandOutBtn">正向</button>
+                    <button class="dir-chip btn-inbound" id="expandInBtn">反向</button>
                 </div>
                 <select id="stationSelect" class="station-select-box">
                     <option value="">-- 請輸入路線搜尋 --</option>
@@ -185,7 +185,7 @@
             <div id="tabExplore" class="tab-panel nearby-panel" data-panel="explore" role="tabpanel" aria-labelledby="tabExploreBtn" hidden>
                 <div class="place-row">
                     <div class="place-field">
-                        <input type="text" id="placeInput" placeholder="站名、地址或路線，例如佐敦" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
+                        <input type="text" id="placeInput" placeholder="輸入地址，例如佐敦彌敦道" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
                         <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入地址" aria-label="語音輸入地址">🎤</button>
                     </div>
                     <div class="place-actions">
@@ -193,7 +193,7 @@
                         <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
                     </div>
                 </div>
-                <div class="quick-hint" id="nearbyHint">可搜站名、地址、路線，或用定位搵約五至十分鐘步行（約 300 至 600 米）內嘅巴士站同路線</div>
+                <div class="quick-hint" id="nearbyHint">輸入地址或站名後，會即刻列出附近約五至十分鐘步行可乘搭嘅巴士路線</div>
                 <div id="nearbyResults" class="nearby-results" hidden></div>
             </div>
             <div id="voiceBar" class="voice-bar" hidden>
@@ -773,6 +773,14 @@
                 },
                 looksLikeRoute(query) {
                     return /^[A-Za-z]{0,2}\d{1,4}[A-Za-z]{0,2}$/.test(String(query || '').trim());
+                },
+                looksLikePlace(query) {
+                    const q = String(query || '').trim();
+                    if (!q || this.looksLikeRoute(q)) return false;
+                    if (/[\u4e00-\u9fff]/.test(q)) return true;
+                    if (/\s/.test(q) && q.length >= 3) return true;
+                    if (q.length >= 4 && /[A-Za-z]/.test(q)) return true;
+                    return false;
                 },
                 searchStops(query, origin, limit) {
                     const q = this._norm(query);
@@ -1741,6 +1749,14 @@
                     const searchHandler = Utils.debounce(() => this._onSearchInput(), CONFIG.UI.debounceDelay);
                     this.elements.companySelect.addEventListener('change', searchHandler);
                     this.elements.routeInput.addEventListener('input', searchHandler);
+                    this.elements.routeInput.addEventListener('keydown', (e) => {
+                        if (e.key !== 'Enter') return;
+                        const raw = (this.elements.routeInput.value || '').trim();
+                        if (NearbyIndex.looksLikePlace(raw)) {
+                            e.preventDefault();
+                            this._searchAddressFromRoute(raw);
+                        }
+                    });
                     this.elements.expandOut.addEventListener('click', () => this._expandDirection('outbound'));
                     this.elements.expandIn.addEventListener('click', () => this._expandDirection('inbound'));
                     this.elements.addBtn.addEventListener('click', () => this._addToWatchList());
@@ -1882,11 +1898,26 @@
                 }
 
                 _onSearchInput() {
-                    const route = this.elements.routeInput.value.trim().toUpperCase();
+                    const raw = (this.elements.routeInput.value || '').trim();
+                    if (NearbyIndex.looksLikePlace(raw)) {
+                        this._searchAddressFromRoute(raw);
+                        return;
+                    }
+                    const route = raw.toUpperCase();
                     if (!route) { this._gpsSuspended = false; this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); return; }
                     this._gpsSuspended = true;
                     this.elements.stationSelect.innerHTML = '<option value="">⏳ 搜尋中...</option>';
                     this._searchStations(route);
+                }
+                _searchAddressFromRoute(raw) {
+                    this.elements.placeInput.value = raw;
+                    this.elements.routeInput.value = '';
+                    this._gpsSuspended = false;
+                    this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線搜尋 --</option>';
+                    this._updateAddButton();
+                    this._updateQuickButtonState();
+                    this._switchTab('explore');
+                    this._searchExplore();
                 }
                 _beginSearch() {
                     this._searchGen += 1;
