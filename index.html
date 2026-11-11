@@ -185,7 +185,7 @@
             <div id="tabExplore" class="tab-panel nearby-panel" data-panel="explore" role="tabpanel" aria-labelledby="tabExploreBtn" hidden>
                 <div class="place-row">
                     <div class="place-field">
-                        <input type="text" id="placeInput" placeholder="輸入地址，例如佐敦彌敦道" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
+                        <input type="text" id="placeInput" placeholder="輸入地址，例如北角英皇道321號" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
                         <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入地址" aria-label="語音輸入地址">🎤</button>
                     </div>
                     <div class="place-actions">
@@ -193,7 +193,7 @@
                         <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
                     </div>
                 </div>
-                <div class="quick-hint" id="nearbyHint">輸入地址或站名後，會即刻列出附近約五至十分鐘步行可乘搭嘅巴士路線</div>
+                <div class="quick-hint" id="nearbyHint">輸入地址後會先精準定位，再列出附近約五至十分鐘步行可乘搭嘅巴士路線</div>
                 <div id="nearbyResults" class="nearby-results" hidden></div>
             </div>
             <div id="voiceBar" class="voice-bar" hidden>
@@ -244,6 +244,7 @@
                     nearbyMaxStops: 40
                 },
                 GEOCODE: {
+                    als: 'https://www.als.gov.hk/lookup',
                     nominatim: 'https://nominatim.openstreetmap.org/search',
                     photon: 'https://photon.komoot.io/api/'
                 },
@@ -430,7 +431,7 @@
             // ========== 資料獲取器 ==========
             class Fetcher {
                 static async fetchJSON(url, options = {}) {
-                    const { maxAttempts = CONFIG.RETRY.maxAttempts, delayMs = CONFIG.RETRY.delayMs, timeoutMs = CONFIG.UI.fetchTimeoutMs, signal } = options;
+                    const { maxAttempts = CONFIG.RETRY.maxAttempts, delayMs = CONFIG.RETRY.delayMs, timeoutMs = CONFIG.UI.fetchTimeoutMs, signal, headers } = options;
                     let lastError;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         if (signal && signal.aborted) {
@@ -443,7 +444,7 @@
                         const onParentAbort = () => ctrl.abort();
                         if (signal) signal.addEventListener('abort', onParentAbort, { once: true });
                         try {
-                            const res = await fetch(url, { signal: ctrl.signal });
+                            const res = await fetch(url, headers ? { signal: ctrl.signal, headers } : { signal: ctrl.signal });
                             if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
                             return await res.json();
                         } catch (e) {
@@ -890,10 +891,196 @@
                 _inHK(lat, lon) {
                     return lat >= 22.12 && lat <= 22.58 && lon >= 113.75 && lon <= 114.52;
                 },
+                _areas: ['西營盤','堅尼地城','尖沙咀','銅鑼灣','黃竹坑','荔枝角','長沙灣','深水埗','石硤尾','九龍塘','九龍城','何文田','紅磡','土瓜灣','新蒲崗','鑽石山','黃大仙','橫頭磡','慈雲山','牛頭角','九龍灣','將軍澳','調景嶺','天水圍','馬鞍山','清水灣','鰂魚涌','西灣河','筲箕灣','杏花邨','小西灣','香港仔','鴨脷洲','淺水灣','油麻地','美孚','樂富','彩虹','藍田','油塘','坑口','寶琳','康城','葵涌','葵芳','青衣','屯門','元朗','錦田','大埔','太和','粉嶺','上水','大圍','火炭','東涌','欣澳','西貢','長洲','坪洲','梅窩','南丫','炮台山','天后','大坑','灣仔','金鐘','中環','上環','薄扶林','赤柱','海怡','佐敦','旺角','太子','觀塘','荃灣','沙田','北角','太古','柴灣','朗屏','兆康','大學','迪士尼','烏溪沙'],
+                _streetPat: /[^\d\s,，、]{1,8}(?:大道[東西中]?|大街|公路|道[東西南北]?|街|路|里|巷)/g,
+                _suffixOnly: /^(大道[東西中]?|大街|公路|道[東西南北]?|街|路|里|巷)$/,
+                _parseQuery(query) {
+                    const q = String(query || '').trim();
+                    const numM = q.match(/(\d+)\s*(?:[-–至]\s*(\d+))?\s*號/);
+                    let body = q;
+                    if (numM) body = body.replace(numM[0], '');
+                    body = body.replace(/香港特別行政區|香港|九龍|新界/g, '').replace(/[,\s，、]/g, '');
+                    let area = '';
+                    const areas = this._areas.slice().sort((a, b) => b.length - a.length);
+                    for (const a of areas) {
+                        if (!body.startsWith(a)) continue;
+                        const rest = body.slice(a.length);
+                        if (rest && this._suffixOnly.test(rest)) continue;
+                        area = a;
+                        body = rest;
+                        break;
+                    }
+                    const streets = body.match(this._streetPat) || [];
+                    if (!area && !streets.length) area = body;
+                    return {
+                        raw: q,
+                        number: numM ? numM[1] : '',
+                        streets,
+                        area
+                    };
+                },
+                _formatAlsLabel(row, areaHint) {
+                    const streetName = row.streetName || '';
+                    let streetNo = '';
+                    if (streetName && row.noFrom) {
+                        streetNo = (row.noTo && row.noTo !== row.noFrom)
+                            ? `${streetName}${row.noFrom}至${row.noTo}號`
+                            : `${streetName}${row.noFrom}號`;
+                    } else {
+                        streetNo = streetName;
+                    }
+                    const chunks = [];
+                    const area = areaHint || '';
+                    const already = streetNo + (row.building || '') + (row.estate || '');
+                    if (area && !already.includes(area)) chunks.push(area);
+                    if (streetNo) chunks.push(streetNo);
+                    if (row.building && !chunks.join('').includes(row.building)) chunks.push(row.building);
+                    else if (!row.building && row.estate && !chunks.join('').includes(row.estate)) chunks.push(row.estate);
+                    return chunks.join('') || row.label || '已定位位置';
+                },
+                _numberMatches(row, number) {
+                    if (!number) return false;
+                    const n = parseInt(number, 10);
+                    const a = parseInt(row.noFrom, 10);
+                    const b = parseInt(row.noTo || row.noFrom, 10);
+                    if (!isFinite(n) || !isFinite(a)) return false;
+                    const lo = Math.min(a, isFinite(b) ? b : a);
+                    const hi = Math.max(a, isFinite(b) ? b : a);
+                    return n >= lo && n <= hi;
+                },
+                _streetMatches(row, streets) {
+                    if (!streets || !streets.length) return false;
+                    const name = String(row.streetName || '');
+                    if (!name) return false;
+                    return streets.some(s => name === s || name.includes(s) || s.includes(name));
+                },
+                _textHas(row, token) {
+                    if (!token) return false;
+                    const blob = [row.building, row.estate, row.district, row.region, row.streetName].join('');
+                    return blob.includes(token);
+                },
+                _median(values) {
+                    const arr = values.slice().sort((a, b) => a - b);
+                    const mid = Math.floor(arr.length / 2);
+                    return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+                },
+                _approxDist(aLat, aLng, bLat, bLng) {
+                    const dlat = (aLat - bLat) * 111000;
+                    const dlng = (aLng - bLng) * 111000 * Math.cos(((aLat + bLat) / 2) * Math.PI / 180);
+                    return Math.hypot(dlat, dlng);
+                },
+                _medianPin(rows, label) {
+                    if (!rows.length) return null;
+                    let lat = this._median(rows.map(r => r.lat));
+                    let lng = this._median(rows.map(r => r.lng));
+                    const kept = rows.filter(r => this._approxDist(r.lat, r.lng, lat, lng) <= 700);
+                    const use = kept.length >= 2 ? kept : rows;
+                    lat = this._median(use.map(r => r.lat));
+                    lng = this._median(use.map(r => r.lng));
+                    const nearest = use.slice().sort((a, b) => this._approxDist(a.lat, a.lng, lat, lng) - this._approxDist(b.lat, b.lng, lat, lng))[0];
+                    return {
+                        lat,
+                        lng,
+                        label: label || (nearest && nearest.label) || '已定位位置',
+                        source: 'ALS'
+                    };
+                },
+                _rowFromAls(s) {
+                    const prem = (s && s.Address && s.Address.PremisesAddress) || {};
+                    const chi = prem.ChiPremisesAddress || {};
+                    const geo = prem.GeospatialInformation || {};
+                    const lat = parseFloat(geo.Latitude);
+                    const lng = parseFloat(geo.Longitude);
+                    if (!isFinite(lat) || !isFinite(lng) || !this._inHK(lat, lng)) return null;
+                    const street = chi.ChiStreet || {};
+                    const district = (chi.ChiDistrict || {}).DcDistrict || '';
+                    const estateObj = chi.ChiEstate;
+                    const estate = (estateObj && (estateObj.EstateName || (estateObj.ChiEstateName && estateObj.ChiEstateName.EstateName))) || (typeof estateObj === 'string' ? estateObj : '') || '';
+                    const row = {
+                        lat,
+                        lng,
+                        source: 'ALS',
+                        score: parseFloat((s.ValidationInformation || {}).Score) || 0,
+                        streetName: street.StreetName || '',
+                        noFrom: street.BuildingNoFrom || '',
+                        noTo: street.BuildingNoTo || '',
+                        building: chi.BuildingName || '',
+                        estate,
+                        district,
+                        region: chi.Region || ''
+                    };
+                    row.label = this._formatAlsLabel(row);
+                    return row;
+                },
+                _pickAls(query, rows) {
+                    if (!rows.length) return null;
+                    const parsed = this._parseQuery(query);
+                    for (const r of rows) r.label = this._formatAlsLabel(r, parsed.area);
+
+                    if (parsed.number) {
+                        const numbered = rows.filter(r => this._numberMatches(r, parsed.number));
+                        if (numbered.length) {
+                            const streetPool = parsed.streets.length
+                                ? numbered.filter(r => this._streetMatches(r, parsed.streets))
+                                : numbered;
+                            const best = (streetPool.length ? streetPool : numbered).slice().sort((a, b) => b.score - a.score)[0];
+                            return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
+                        }
+                    }
+
+                    const isStreetQuery = parsed.streets.length > 0 && !parsed.number;
+                    if (isStreetQuery) {
+                        let streetRows = rows.filter(r => this._streetMatches(r, parsed.streets));
+                        if (parsed.area) {
+                            const areaRows = streetRows.filter(r => this._textHas(r, parsed.area));
+                            if (areaRows.length) streetRows = areaRows;
+                        }
+                        if (streetRows.length >= 2) {
+                            const label = parsed.area ? `${parsed.area}${parsed.streets[0]}` : parsed.streets[0];
+                            return this._medianPin(streetRows, label);
+                        }
+                        if (streetRows.length === 1) {
+                            return { lat: streetRows[0].lat, lng: streetRows[0].lng, label: streetRows[0].label, source: 'ALS' };
+                        }
+                    }
+
+                    const named = rows.filter(r => {
+                        const blob = `${r.building || ''}${r.estate || ''}`;
+                        if (!blob) return false;
+                        if (blob.includes(parsed.raw) || parsed.raw.includes(blob)) return true;
+                        return parsed.area && blob.includes(parsed.area);
+                    });
+                    if (named.length) {
+                        const estateName = named[0].estate;
+                        const sameEstate = estateName ? named.filter(r => r.estate === estateName) : [];
+                        if (sameEstate.length >= 3) return this._medianPin(sameEstate, estateName || query);
+                        const best = named.slice().sort((a, b) => b.score - a.score)[0];
+                        return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
+                    }
+
+                    const best = rows.slice().sort((a, b) => b.score - a.score)[0];
+                    return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
+                },
                 async _waitRateLimit() {
                     const wait = 1100 - (Date.now() - this._lastAt);
                     if (wait > 0) await Utils.sleep(wait);
                     this._lastAt = Date.now();
+                },
+                async _als(query, signal) {
+                    const params = new URLSearchParams({ q: query, n: '20' });
+                    const url = `${CONFIG.GEOCODE.als}?${params.toString()}`;
+                    const json = await Fetcher.fetchJSON(url, {
+                        signal,
+                        maxAttempts: 1,
+                        timeoutMs: 10000,
+                        headers: { 'Accept': 'application/json', 'Accept-Language': 'zh-Hant,zh-HK' }
+                    });
+                    const rows = [];
+                    for (const s of (json && json.SuggestedAddress) || []) {
+                        const row = this._rowFromAls(s);
+                        if (row) rows.push(row);
+                    }
+                    return this._pickAls(query, rows);
                 },
                 async _nominatim(query, signal) {
                     const params = new URLSearchParams({
@@ -942,12 +1129,19 @@
                 async search(query, signal) {
                     const q0 = String(query || '').trim();
                     if (!q0) throw new Error('請輸入地址或地區名稱');
+                    let lastErr = null;
+                    try {
+                        const hit = await this._als(q0, signal);
+                        if (hit) return hit;
+                    } catch (e) {
+                        if (e && e.name === 'AbortError') throw e;
+                        lastErr = e;
+                    }
                     const variants = [q0];
                     if (!/[香港九龍新界港島]|Hong Kong|Kowloon/i.test(q0)) {
                         variants.push(`${q0} 香港`);
                         variants.push(`${q0}, Hong Kong`);
                     }
-                    let lastErr = null;
                     for (const q of variants) {
                         await this._waitRateLimit();
                         try {
@@ -2487,7 +2681,7 @@
                     }
                     const attrib = document.createElement('div');
                     attrib.className = 'nearby-attrib';
-                    attrib.textContent = '地址搜尋用 OpenStreetMap Nominatim，必要時改用 Photon';
+                    attrib.textContent = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap';
                     box.appendChild(attrib);
                 }
                 async _runNearbySearch(lat, lng, originLabel) {
@@ -2648,14 +2842,15 @@
                         let nearbyLabel = '';
                         let attrib = '';
                         if (!isRouteNo) {
-                            this._setNearbyHint(`正在將「${raw}」當成地址，即刻列出附近路線…`);
+                            this._setNearbyHint(`正在將「${raw}」精準定位，再列出附近可乘搭路線…`);
                             try {
                                 const geo = await Geocoder.search(raw, signal);
                                 if (geo) {
+                                    this._setNearbyHint(`已定位到「${geo.label}」，正在搵附近路線…`);
                                     nearbyRoutes = NearbyIndex.nearbyRoutes(geo.lat, geo.lng);
                                     nearby = NearbyIndex.findNearby(geo.lat, geo.lng);
                                     nearbyLabel = geo.label;
-                                    attrib = '地址搜尋用 OpenStreetMap Nominatim，必要時改用 Photon';
+                                    attrib = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap';
                                 }
                             } catch (e) {
                                 if (e && e.name === 'AbortError') throw e;
@@ -2671,7 +2866,8 @@
                         if (routes.length) parts.push(`${routes.length} 條相符路線`);
                         if (stops.length) parts.push(`${stops.length} 個車站`);
                         if (nearby.length) parts.push(`${nearby.length} 個附近站`);
-                        this._setNearbyHint(parts.length ? `搵到 ${parts.join('、')}。撳附近路線即可加入關注。` : `搵唔到「${raw}」，可改試更完整嘅站名或地址。`, parts.length ? 'ok' : 'error');
+                        const located = nearbyLabel ? `已定位到「${nearbyLabel}」，` : '';
+                        this._setNearbyHint(parts.length ? `${located}搵到 ${parts.join('、')}。撳附近路線即可加入關注。` : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`, parts.length ? 'ok' : 'error');
                     } catch (e) {
                         if (e && e.name === 'AbortError') return;
                         this._setNearbyHint(e.message || '搜尋失敗', 'error');
