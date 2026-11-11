@@ -782,6 +782,7 @@
                             if (!prev || stop.dist < prev.dist) destByKey.set(key, Object.assign({}, stop, { route }));
                         }
                     }
+                    const isAlightOnly = (stop) => /落客/.test(String(stop.stopName || ''));
                     const map = new Map();
                     for (const stop of originStops) {
                         for (const route of stop.routes || []) {
@@ -791,7 +792,9 @@
                             if (!alight) continue;
                             if (String(alight.stopId) === String(stop.stopId)) continue;
                             const prev = map.get(key);
-                            if (!prev || stop.dist < prev.dist) {
+                            const worseAlightOnly = prev && isAlightOnly(prev) && !isAlightOnly(stop);
+                            const better = !prev || worseAlightOnly || (stop.dist < prev.dist && !(isAlightOnly(stop) && !isAlightOnly(prev)));
+                            if (better) {
                                 map.set(key, {
                                     kind: 'journey',
                                     company: stop.company,
@@ -2848,7 +2851,15 @@
                     }
                     if (destLabel || hasJourneys) {
                         box.appendChild(this._renderNearbyRouteSection(journeys || [], destLabel, 'journey'));
-                    } else if (hasNearbyRoutes || nearbyLabel) {
+                        if (attrib) {
+                            const el = document.createElement('div');
+                            el.className = 'nearby-attrib';
+                            el.textContent = attrib;
+                            box.appendChild(el);
+                        }
+                        return;
+                    }
+                    if (hasNearbyRoutes || nearbyLabel) {
                         box.appendChild(this._renderNearbyRouteSection(nearbyRoutes || [], nearbyLabel));
                     }
                     if (routes && routes.length) {
