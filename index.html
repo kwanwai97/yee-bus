@@ -81,7 +81,7 @@
         .empty-message { text-align: center; color: #adb5bd; padding: 28px 0; font-size: 0.9rem; }
         .loading-dots::after { content: '...'; animation: dots 1.2s steps(3, end) infinite; }
         @keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
-        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-name { font-size: 1.05rem; } .route-left { width: 44px; } .route-dest { font-size: 0.72rem; } .station-name { font-size: 0.66rem; } .walk-info { font-size: 0.64rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
+        @media (max-width: 400px) { .input-row select { min-width: 65px; font-size: 0.75rem; } .input-row input { min-width: 65px; max-width: 75px; font-size: 0.8rem; } .input-row .route-field input { max-width: none; font-size: 0.85rem; } .search-tab { font-size: 0.8rem; padding: 7px 6px; } .input-row .dir-chip { font-size: 0.7rem; padding: 2px 5px; border-radius: 14px; } .route-name { font-size: 1.05rem; } .route-left { width: 44px; } .route-dest { font-size: 0.72rem; } .station-name { font-size: 0.66rem; } .walk-info { font-size: 0.64rem; } .eta-multi { font-size: 0.85rem; min-width: 40px; } .btn-locate { flex: 0.6 !important; min-width: 56px !important; font-size: 0.7rem !important; padding: 8px 4px !important; } }
         .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #212529; color: #fff; padding: 10px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); z-index: 999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; max-width: 90%; }
         .toast.show { opacity: 1; }
         .quick-hint { font-size: 0.7rem; color: #6c757d; margin-top: 4px; text-align: right; min-height: 1.2rem; transition: color 0.3s; cursor: pointer; }
@@ -117,6 +117,32 @@
         .nearby-chip.badge-nlb { background: #1c7ed6; }
         .nearby-attrib { font-size: 0.62rem; color: #adb5bd; margin-top: 6px; text-align: right; }
         .nearby-empty { text-align: center; color: #868e96; font-size: 0.8rem; padding: 10px 0; }
+        .search-tabs { display: flex; background: #e9ecef; border-radius: 12px; padding: 3px; margin-bottom: 12px; gap: 0; }
+        .search-tab { flex: 1; border: none; background: transparent; padding: 8px 10px; border-radius: 10px; font-weight: 700; font-size: 0.88rem; color: #495057; cursor: pointer; line-height: 1.2; }
+        .search-tab.active { background: #fff; color: #1a1a2e; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .tab-panel[hidden] { display: none !important; }
+        .input-row .route-field { flex: 1 1 110px; display: flex; gap: 6px; min-width: 0; align-items: stretch; }
+        .input-row .route-field input { flex: 1 1 auto; min-width: 0; max-width: none; }
+        .voice-btn { flex: 0 0 41px; width: 41px; height: 41px; padding: 0; border: 1px solid #ced4da; border-radius: 10px; background: #fff; cursor: pointer; font-size: 1.05rem; line-height: 1; color: #495057; }
+        .voice-btn:hover { background: #f1f3f5; }
+        .voice-btn.listening { background: #c92a2a; border-color: #c92a2a; color: #fff; animation: pulse 1s infinite; }
+        .no-voice .voice-btn { display: none; }
+        .nearby-panel { margin-top: 0; padding-top: 0; border-top: none; }
+        .place-row { align-items: stretch; }
+        .place-row .place-field { flex: 1 1 140px; display: flex; gap: 6px; min-width: 0; }
+        .place-row .place-field input { flex: 1 1 auto; }
+        .place-actions { display: flex; gap: 8px; width: 100%; }
+        .place-actions .btn { flex: 1; min-width: 0; }
+        .voice-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 10px; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 10px; color: #c92a2a; font-size: 0.8rem; font-weight: 600; }
+        .voice-bar[hidden] { display: none !important; }
+        .voice-bar button { border: none; background: #c92a2a; color: #fff; border-radius: 16px; padding: 4px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .result-section { display: flex; flex-direction: column; gap: 6px; }
+        .result-title { font-size: 0.75rem; font-weight: 700; color: #868e96; letter-spacing: 0.3px; padding: 2px 2px 0; }
+        .route-hit { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 1px solid #e9ecef; background: #fff; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+        .route-hit:hover { background: #f8f9fa; }
+        .route-hit .route-hit-no { font-weight: 800; font-size: 1.05rem; color: #1a1a2e; min-width: 48px; }
+        .route-hit .route-hit-meta { flex: 1; min-width: 0; font-size: 0.78rem; color: #495057; line-height: 1.25; }
+        .nearby-results { max-height: 52vh; }
     </style>
 </head>
 <body>
@@ -128,34 +154,52 @@
                 <span id="gpsStatus">📡 定位中...</span>
             </div>
         </div>
-        <div class="search-panel">
-            <div class="input-row">
-                <select id="companySelect">
-                    <option value="KMB" selected>九巴</option>
-                    <option value="CTB">城巴</option>
-                    <option value="NLB">嶼巴</option>
-                </select>
-                <input type="text" id="routeInput" placeholder="路線" autocomplete="off">
-                <button class="dir-chip btn-outbound" id="expandOutBtn">🟢 正向</button>
-                <button class="dir-chip btn-inbound" id="expandInBtn">🔵 反向</button>
+        <div class="search-panel" id="searchPanel">
+            <div class="search-tabs" role="tablist" aria-label="搜尋方式">
+                <button type="button" class="search-tab active" id="tabRouteBtn" data-tab="route" role="tab" aria-selected="true" aria-controls="tabRoute">路線</button>
+                <button type="button" class="search-tab" id="tabExploreBtn" data-tab="explore" role="tab" aria-selected="false" aria-controls="tabExplore">附近同搜尋</button>
             </div>
-            <select id="stationSelect" class="station-select-box">
-                <option value="">-- 請輸入路線搜尋 --</option>
-            </select>
-            <div class="add-row">
-                <button id="addBtn" class="btn btn-add" disabled>➕ 加入關注</button>
-                <button id="quickAddBtn" class="btn btn-quick" disabled>📍 最近站</button>
-                <button id="locateBtn" class="btn btn-locate">📡 定位</button>
-            </div>
-            <div class="quick-hint" id="quickHint">📍 點擊「定位」啟用 GPS，以使用最近站功能</div>
-            <div class="nearby-panel">
-                <div class="place-row">
-                    <input type="text" id="placeInput" placeholder="輸入地址或地區，例如佐敦" autocomplete="off" enterkeyhint="search">
-                    <button id="placeSearchBtn" class="btn btn-place" type="button">搜尋地址</button>
-                    <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
+            <div id="tabRoute" class="tab-panel" data-panel="route" role="tabpanel" aria-labelledby="tabRouteBtn">
+                <div class="input-row">
+                    <select id="companySelect">
+                        <option value="KMB" selected>九巴</option>
+                        <option value="CTB">城巴</option>
+                        <option value="NLB">嶼巴</option>
+                    </select>
+                    <div class="route-field">
+                        <input type="text" id="routeInput" placeholder="路線" autocomplete="off" enterkeyhint="search" aria-label="路線號碼">
+                        <button type="button" class="voice-btn" id="routeVoiceBtn" title="語音輸入路線" aria-label="語音輸入路線">🎤</button>
+                    </div>
+                    <button class="dir-chip btn-outbound" id="expandOutBtn">🟢 正向</button>
+                    <button class="dir-chip btn-inbound" id="expandInBtn">🔵 反向</button>
                 </div>
-                <div class="quick-hint" id="nearbyHint">用定位或輸入地址，搵大約 400 米內嘅巴士站同路線</div>
+                <select id="stationSelect" class="station-select-box">
+                    <option value="">-- 請輸入路線搜尋 --</option>
+                </select>
+                <div class="add-row">
+                    <button id="addBtn" class="btn btn-add" disabled>➕ 加入關注</button>
+                    <button id="quickAddBtn" class="btn btn-quick" disabled>📍 最近站</button>
+                    <button id="locateBtn" class="btn btn-locate">📡 定位</button>
+                </div>
+                <div class="quick-hint" id="quickHint">📍 點擊「定位」啟用 GPS，以使用最近站功能</div>
+            </div>
+            <div id="tabExplore" class="tab-panel nearby-panel" data-panel="explore" role="tabpanel" aria-labelledby="tabExploreBtn" hidden>
+                <div class="place-row">
+                    <div class="place-field">
+                        <input type="text" id="placeInput" placeholder="站名、地址或路線，例如佐敦" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
+                        <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入搜尋" aria-label="語音輸入搜尋">🎤</button>
+                    </div>
+                    <div class="place-actions">
+                        <button id="placeSearchBtn" class="btn btn-place" type="button">搜尋</button>
+                        <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
+                    </div>
+                </div>
+                <div class="quick-hint" id="nearbyHint">可搜站名、地址、路線，或用定位搵大約 400 米內嘅巴士站</div>
                 <div id="nearbyResults" class="nearby-results" hidden></div>
+            </div>
+            <div id="voiceBar" class="voice-bar" hidden>
+                <span id="voiceBarText">正在聽緊，請開始講</span>
+                <button type="button" id="voiceCancelBtn">取消</button>
             </div>
         </div>
         <div class="monitor-header">
@@ -692,6 +736,113 @@
                     }
                     hits.sort((a, b) => a.dist - b.dist || a.stopName.localeCompare(b.stopName, 'zh-Hant'));
                     return hits.slice(0, limit);
+                },
+                _norm(text) {
+                    return String(text || '').toLowerCase().replace(/\s+/g, '');
+                },
+                looksLikeRoute(query) {
+                    return /^[A-Za-z]{0,2}\d{1,4}[A-Za-z]{0,2}$/.test(String(query || '').trim());
+                },
+                searchStops(query, origin, limit) {
+                    const q = this._norm(query);
+                    if (!q) return [];
+                    const cap = limit || CONFIG.UI.nearbyMaxStops;
+                    const hasOrigin = origin && isFinite(origin.lat) && isFinite(origin.lng);
+                    const hits = [];
+                    for (const s of this.collectStops()) {
+                        const name = this._norm(s.stopName);
+                        const id = this._norm(s.stopId);
+                        const routes = (s.routes || []).some(r => this._norm(r) === q || this._norm(r).startsWith(q));
+                        if (!name.includes(q) && !id.includes(q) && !routes) continue;
+                        const dist = hasOrigin ? Math.round(Utils.calcDistance(origin.lat, origin.lng, s.lat, s.lng)) : null;
+                        hits.push(Object.assign({}, s, { dist: isFinite(dist) ? dist : null }));
+                    }
+                    hits.sort((a, b) => {
+                        const da = isFinite(a.dist) ? a.dist : 999999;
+                        const db = isFinite(b.dist) ? b.dist : 999999;
+                        if (da !== db) return da - db;
+                        return a.stopName.localeCompare(b.stopName, 'zh-Hant');
+                    });
+                    return hits.slice(0, cap);
+                },
+                async loadRouteCatalog() {
+                    if (this._routeCatalog) return this._routeCatalog;
+                    await this.ensureCore();
+                    const catalog = [];
+                    let kmbList = routeCache.get('KMB:routeList');
+                    if (!kmbList) {
+                        try {
+                            const json = await Fetcher.fetchJSON(`${CONFIG.API.KMB}/route/`);
+                            kmbList = json.data || [];
+                            routeCache.set('KMB:routeList', kmbList);
+                        } catch (e) {
+                            kmbList = [];
+                        }
+                    }
+                    const kmbMap = new Map();
+                    for (const r of (kmbList || [])) {
+                        const route = String(r.route || '').trim();
+                        if (!route) continue;
+                        let row = kmbMap.get(route);
+                        if (!row) {
+                            row = { company: 'KMB', route, orig: r.orig_tc || '', dest: r.dest_tc || '' };
+                            kmbMap.set(route, row);
+                        } else if ((r.bound === 'I' || r.bound === 'inbound') && (r.orig_tc || r.dest_tc)) {
+                            if (!row.orig) row.orig = r.dest_tc || row.orig;
+                            if (!row.dest) row.dest = r.orig_tc || row.dest;
+                        }
+                    }
+                    catalog.push(...kmbMap.values());
+                    const ctb = new Set();
+                    for (const s of CTBStops.all()) {
+                        for (const route of (s.routes || [])) {
+                            if (route) ctb.add(String(route));
+                        }
+                    }
+                    for (const route of [...ctb].sort()) catalog.push({ company: 'CTB', route, orig: '', dest: '' });
+                    try {
+                        const listCacheKey = 'NLB:routeList';
+                        let listJson = routeCache.get(listCacheKey);
+                        if (!listJson) {
+                            listJson = await Fetcher.fetchJSON(`${CONFIG.API.NLB}/route.php?action=list`);
+                            routeCache.set(listCacheKey, listJson);
+                        }
+                        const seen = new Set();
+                        for (const r of (listJson.routes || [])) {
+                            const route = String(r.routeNo || '').trim();
+                            if (!route || seen.has(route)) continue;
+                            seen.add(route);
+                            const name = String(r.routeName_c || r.routeName_e || '');
+                            const parts = name.split(/\s*>\s*/);
+                            catalog.push({
+                                company: 'NLB',
+                                route,
+                                orig: (parts[0] || '').trim(),
+                                dest: parts.length > 1 ? parts.slice(1).join(' > ').trim() : ''
+                            });
+                        }
+                    } catch (e) {}
+                    this._routeCatalog = catalog;
+                    return catalog;
+                },
+                async searchRoutes(query, limit) {
+                    const q = this._norm(query);
+                    if (!q) return [];
+                    const cap = limit || 20;
+                    const catalog = await this.loadRouteCatalog();
+                    const hits = [];
+                    for (const r of catalog) {
+                        const route = this._norm(r.route);
+                        const orig = this._norm(r.orig);
+                        const dest = this._norm(r.dest);
+                        const exact = route === q;
+                        const prefix = route.startsWith(q);
+                        const text = orig.includes(q) || dest.includes(q);
+                        if (!exact && !prefix && !text && !route.includes(q)) continue;
+                        hits.push(Object.assign({ _rank: exact ? 0 : prefix ? 1 : 2 }, r));
+                    }
+                    hits.sort((a, b) => a._rank - b._rank || a.route.localeCompare(b.route, 'en', { numeric: true }) || a.company.localeCompare(b.company));
+                    return hits.slice(0, cap);
                 }
             };
 
@@ -779,6 +930,77 @@
                     }
                     if (lastErr) throw lastErr;
                     return null;
+                }
+            };
+
+            const VoiceInput = {
+                _rec: null,
+                _target: null,
+                supported() {
+                    return typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                },
+                isListening() { return !!this._rec; },
+                stop() {
+                    const rec = this._rec;
+                    this._rec = null;
+                    this._target = null;
+                    if (!rec) return;
+                    try { rec.onresult = rec.onerror = rec.onend = rec.onspeechend = null; } catch (e) {}
+                    try { rec.abort(); } catch (e) {
+                        try { rec.stop(); } catch (e2) {}
+                    }
+                },
+                start(inputEl, opts) {
+                    const options = opts || {};
+                    if (!this.supported()) {
+                        if (options.onError) options.onError(new Error('呢部裝置唔支援語音輸入'));
+                        return false;
+                    }
+                    this.stop();
+                    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    const rec = new Ctor();
+                    rec.lang = 'zh-HK';
+                    rec.interimResults = true;
+                    rec.continuous = false;
+                    rec.maxAlternatives = 1;
+                    this._rec = rec;
+                    this._target = inputEl;
+                    rec.onresult = (event) => {
+                        let interim = '';
+                        let finalText = '';
+                        for (let i = event.resultIndex; i < event.results.length; i++) {
+                            const piece = event.results[i][0] && event.results[i][0].transcript ? event.results[i][0].transcript : '';
+                            if (event.results[i].isFinal) finalText += piece;
+                            else interim += piece;
+                        }
+                        const text = (finalText || interim).trim();
+                        if (text && inputEl) inputEl.value = text;
+                        if (finalText && options.onFinal) options.onFinal(finalText.trim());
+                    };
+                    rec.onerror = (event) => {
+                        const err = (event && event.error) || '';
+                        if (err === 'aborted' || err === 'canceled') return;
+                        let msg = '語音輸入失敗';
+                        if (err === 'not-allowed') msg = '語音權限被拒，請喺瀏覽器設定允許麥克風';
+                        else if (err === 'no-speech') msg = '聽唔到，請再試一次';
+                        else if (err === 'audio-capture') msg = '搵唔到麥克風';
+                        else if (err === 'network') msg = '語音服務網絡錯誤';
+                        if (options.onError) options.onError(new Error(msg));
+                    };
+                    rec.onend = () => {
+                        const ended = this._rec === rec;
+                        if (ended) this._rec = null;
+                        if (options.onEnd) options.onEnd();
+                    };
+                    try {
+                        rec.start();
+                        if (options.onStart) options.onStart();
+                        return true;
+                    } catch (e) {
+                        this._rec = null;
+                        if (options.onError) options.onError(e);
+                        return false;
+                    }
                 }
             };
 
@@ -1421,7 +1643,17 @@
                         placeSearchBtn: document.getElementById('placeSearchBtn'),
                         nearbyGpsBtn: document.getElementById('nearbyGpsBtn'),
                         nearbyHint: document.getElementById('nearbyHint'),
-                        nearbyResults: document.getElementById('nearbyResults')
+                        nearbyResults: document.getElementById('nearbyResults'),
+                        searchPanel: document.getElementById('searchPanel'),
+                        tabRouteBtn: document.getElementById('tabRouteBtn'),
+                        tabExploreBtn: document.getElementById('tabExploreBtn'),
+                        tabRoute: document.getElementById('tabRoute'),
+                        tabExplore: document.getElementById('tabExplore'),
+                        routeVoiceBtn: document.getElementById('routeVoiceBtn'),
+                        placeVoiceBtn: document.getElementById('placeVoiceBtn'),
+                        voiceBar: document.getElementById('voiceBar'),
+                        voiceBarText: document.getElementById('voiceBarText'),
+                        voiceCancelBtn: document.getElementById('voiceCancelBtn')
                     };
                     this.gps = new GPSManager();
                     this.watchList = new WatchList();
@@ -1471,6 +1703,8 @@
                     KMBStops.load().catch(() => {});
                     CTBStops.load().catch(() => {});
                     NearbyIndex.loadNLB().catch(() => {});
+                    this._initVoiceUi();
+                    this._restoreTab();
                 }
 
                 _bindEvents() {
@@ -1513,18 +1747,25 @@
                     this.elements.clearBtn.addEventListener('click', () => {
                         if (confirm('確定要清空所有關注路線嗎？')) { this.watchList.clear(); this.fetchETA(); this.showToast('已清空'); }
                     });
-                    this.elements.placeSearchBtn.addEventListener('click', () => this._searchNearbyByAddress());
+                    this.elements.placeSearchBtn.addEventListener('click', () => this._searchExplore());
                     this.elements.placeInput.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') {
                             e.preventDefault();
-                            this._searchNearbyByAddress();
+                            this._searchExplore();
                         }
                     });
                     this.elements.nearbyGpsBtn.addEventListener('click', () => this._searchNearbyByGps());
                     this.elements.nearbyResults.addEventListener('click', (e) => {
                         const chip = e.target.closest('.nearby-chip');
                         if (chip) this._addNearbyChip(chip);
+                        const hit = e.target.closest('.route-hit');
+                        if (hit) this._openRouteFromHit(hit);
                     });
+                    this.elements.tabRouteBtn.addEventListener('click', () => this._switchTab('route'));
+                    this.elements.tabExploreBtn.addEventListener('click', () => this._switchTab('explore'));
+                    this.elements.routeVoiceBtn.addEventListener('click', () => this._toggleVoice('route'));
+                    this.elements.placeVoiceBtn.addEventListener('click', () => this._toggleVoice('explore'));
+                    this.elements.voiceCancelBtn.addEventListener('click', () => this._stopVoice('已取消語音輸入'));
                     this.elements.stationSelect.addEventListener('change', () => this._updateAddButton());
                     this.elements.quickHint.addEventListener('click', (e) => {
                         if (e.target.classList.contains('hint-btn')) {
@@ -2033,6 +2274,110 @@
                     }
                 }
 
+                _initVoiceUi() {
+                    const ok = VoiceInput.supported();
+                    if (this.elements.searchPanel) {
+                        this.elements.searchPanel.classList.toggle('no-voice', !ok);
+                    }
+                    if (!ok) {
+                        this.elements.routeVoiceBtn.hidden = true;
+                        this.elements.placeVoiceBtn.hidden = true;
+                    }
+                }
+                _restoreTab() {
+                    let tab = 'route';
+                    try { tab = sessionStorage.getItem('yee_bus_tab') || 'route'; } catch (e) {}
+                    if (tab === 'explore') this._switchTab('explore');
+                }
+                _switchTab(tab) {
+                    const explore = tab === 'explore';
+                    this.elements.tabRoute.hidden = explore;
+                    this.elements.tabExplore.hidden = !explore;
+                    this.elements.tabRouteBtn.classList.toggle('active', !explore);
+                    this.elements.tabExploreBtn.classList.toggle('active', explore);
+                    this.elements.tabRouteBtn.setAttribute('aria-selected', explore ? 'false' : 'true');
+                    this.elements.tabExploreBtn.setAttribute('aria-selected', explore ? 'true' : 'false');
+                    try { sessionStorage.setItem('yee_bus_tab', explore ? 'explore' : 'route'); } catch (e) {}
+                    if (explore) NearbyIndex.ensureCore().catch(() => {});
+                }
+                _setVoiceListening(on, message) {
+                    const btns = [this.elements.routeVoiceBtn, this.elements.placeVoiceBtn];
+                    for (const btn of btns) {
+                        if (!btn) continue;
+                        btn.classList.toggle('listening', !!on);
+                        btn.title = on ? '停止語音輸入' : (btn.id === 'routeVoiceBtn' ? '語音輸入路線' : '語音輸入搜尋');
+                        btn.setAttribute('aria-label', btn.title);
+                    }
+                    if (this.elements.voiceBar) this.elements.voiceBar.hidden = !on;
+                    if (on && this.elements.voiceBarText) {
+                        this.elements.voiceBarText.textContent = message || '正在聽緊，請開始講';
+                    }
+                }
+                _stopVoice(toastMsg) {
+                    const was = VoiceInput.isListening();
+                    VoiceInput.stop();
+                    this._setVoiceListening(false);
+                    if (was && toastMsg) this.showToast(toastMsg);
+                }
+                _toggleVoice(which) {
+                    if (!VoiceInput.supported()) {
+                        this.showToast('呢部瀏覽器唔支援語音輸入');
+                        return;
+                    }
+                    if (VoiceInput.isListening()) {
+                        this._stopVoice('已取消語音輸入');
+                        return;
+                    }
+                    if (which === 'explore') this._switchTab('explore');
+                    else this._switchTab('route');
+                    const input = which === 'explore' ? this.elements.placeInput : this.elements.routeInput;
+                    const started = VoiceInput.start(input, {
+                        onStart: () => this._setVoiceListening(true, which === 'explore' ? '正在聽緊，請講站名、地址或路線' : '正在聽緊，請講路線號碼'),
+                        onEnd: () => this._setVoiceListening(false),
+                        onError: (err) => {
+                            this._setVoiceListening(false);
+                            this.showToast((err && err.message) || '語音輸入失敗');
+                        },
+                        onFinal: (text) => {
+                            if (!text) return;
+                            if (which === 'explore') this._searchExplore();
+                            else this._onSearchInput();
+                        }
+                    });
+                    if (!started) this._setVoiceListening(false);
+                }
+                _companyLabel(company) {
+                    return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : '嶼巴';
+                }
+                _openRouteFromHit(hit) {
+                    const company = hit.dataset.company;
+                    const route = hit.dataset.route;
+                    if (!company || !route) return;
+                    this._switchTab('route');
+                    this.elements.companySelect.value = company;
+                    this.elements.routeInput.value = route;
+                    this._onSearchInput();
+                    this.showToast(`已轉去 ${this._companyLabel(company)} ${route}`);
+                }
+                _stopCardHtml(stop) {
+                    const routes = [...new Set(stop.routes || [])];
+                    const chips = routes.map(route => {
+                        const cls = `nearby-chip badge-${String(stop.company || '').toLowerCase()}`;
+                        const routeId = (stop.routeIds && stop.routeIds[route]) ? String(stop.routeIds[route]) : '';
+                        const coLabel = this._companyLabel(stop.company);
+                        return `<button type="button" class="${cls}" data-company="${Utils.escapeHtml(stop.company)}" data-route="${Utils.escapeHtml(route)}" data-stop-id="${Utils.escapeHtml(stop.stopId)}" data-stop-name="${Utils.escapeHtml(stop.stopName)}" data-lat="${stop.lat}" data-lng="${stop.lng}" data-route-id="${Utils.escapeHtml(routeId)}">${Utils.escapeHtml(coLabel)} ${Utils.escapeHtml(route)}</button>`;
+                    }).join('');
+                    const name = StopPlates.label(stop.stopName || '', stop.stopId);
+                    const dist = (stop.dist != null && isFinite(stop.dist)) ? `<div class="nearby-stop-dist">${stop.dist}m</div>` : '';
+                    return `
+                        <div class="nearby-stop">
+                            <div class="nearby-stop-head">
+                                <div class="nearby-stop-name">📍 ${Utils.escapeHtml(name)}</div>
+                                ${dist}
+                            </div>
+                            <div class="nearby-routes">${chips}</div>
+                        </div>`;
+                }
                 _setNearbyHint(text, kind) {
                     const el = this.elements.nearbyHint;
                     el.textContent = text;
@@ -2134,6 +2479,7 @@
                     });
                 }
                 async _searchNearbyByGps() {
+                    this._switchTab('explore');
                     const btn = this.elements.nearbyGpsBtn;
                     btn.disabled = true;
                     const old = btn.textContent;
@@ -2152,9 +2498,55 @@
                     }
                 }
                 async _searchNearbyByAddress() {
+                    return this._searchExplore();
+                }
+                _renderExploreResults({ routes, stops, nearby, nearbyLabel, attrib }) {
+                    const box = this.elements.nearbyResults;
+                    box.hidden = false;
+                    box.innerHTML = '';
+                    const hasAny = (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
+                    if (!hasAny) {
+                        const empty = document.createElement('div');
+                        empty.className = 'nearby-empty';
+                        empty.textContent = '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼';
+                        box.appendChild(empty);
+                        return;
+                    }
+                    if (routes && routes.length) {
+                        const sec = document.createElement('div');
+                        sec.className = 'result-section';
+                        sec.innerHTML = `<div class="result-title">路線</div>` + routes.map(r => {
+                            const co = this._companyLabel(r.company);
+                            const meta = (r.orig || r.dest) ? `${r.orig || '?'}${r.dest ? ' ⇄ ' + r.dest : ''}` : '撳呢度用呢條線搵站';
+                            return `<button type="button" class="route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                        }).join('');
+                        box.appendChild(sec);
+                    }
+                    if (stops && stops.length) {
+                        const sec = document.createElement('div');
+                        sec.className = 'result-section';
+                        sec.innerHTML = `<div class="result-title">車站</div>` + stops.map(s => this._stopCardHtml(s)).join('');
+                        box.appendChild(sec);
+                    }
+                    if (nearby && nearby.length) {
+                        const sec = document.createElement('div');
+                        sec.className = 'result-section';
+                        const title = nearbyLabel ? `附近站（${nearbyLabel}）` : '附近站';
+                        sec.innerHTML = `<div class="result-title">${Utils.escapeHtml(title)}</div>` + nearby.map(s => this._stopCardHtml(s)).join('');
+                        box.appendChild(sec);
+                    }
+                    if (attrib) {
+                        const el = document.createElement('div');
+                        el.className = 'nearby-attrib';
+                        el.textContent = attrib;
+                        box.appendChild(el);
+                    }
+                }
+                async _searchExplore() {
+                    this._switchTab('explore');
                     const raw = (this.elements.placeInput.value || '').trim();
                     if (!raw) {
-                        this.showToast('請先輸入地址或地區，例如佐敦');
+                        this.showToast('請輸入站名、地址或路線，例如佐敦');
                         this.elements.placeInput.focus();
                         return;
                     }
@@ -2165,15 +2557,41 @@
                     btn.disabled = true;
                     const old = btn.textContent;
                     btn.textContent = '⏳ 搜尋中';
-                    this._setNearbyHint(`正在將「${raw}」轉成座標…`);
+                    this.elements.nearbyResults.hidden = false;
+                    this.elements.nearbyResults.innerHTML = '<div class="nearby-empty loading-dots">正在搜尋</div>';
+                    this._setNearbyHint(`正在搜「${raw}」…`);
                     try {
-                        const geo = await Geocoder.search(raw, signal);
-                        if (!geo) throw new Error(`搵唔到「${raw}」呢個地址，可改試更完整嘅名稱`);
-                        await this._runNearbySearch(geo.lat, geo.lng, geo.label);
+                        await NearbyIndex.ensureCore();
+                        const origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : null;
+                        const routes = await NearbyIndex.searchRoutes(raw);
+                        const stops = NearbyIndex.searchStops(raw, origin);
+                        let nearby = [];
+                        let nearbyLabel = '';
+                        let attrib = '';
+                        const shouldGeocode = !NearbyIndex.looksLikeRoute(raw);
+                        if (shouldGeocode) {
+                            this._setNearbyHint(`已有本地結果，再試下將「${raw}」當成地址…`);
+                            try {
+                                const geo = await Geocoder.search(raw, signal);
+                                if (geo) {
+                                    nearby = NearbyIndex.findNearby(geo.lat, geo.lng);
+                                    nearbyLabel = geo.label;
+                                    attrib = '地址搜尋用 OpenStreetMap Nominatim，必要時改用 Photon';
+                                }
+                            } catch (e) {
+                                if (e && e.name === 'AbortError') throw e;
+                            }
+                        }
+                        this._renderExploreResults({ routes, stops, nearby, nearbyLabel, attrib });
+                        const parts = [];
+                        if (routes.length) parts.push(`${routes.length} 條路線`);
+                        if (stops.length) parts.push(`${stops.length} 個車站`);
+                        if (nearby.length) parts.push(`${nearby.length} 個附近站`);
+                        this._setNearbyHint(parts.length ? `搵到 ${parts.join('、')}。撳路線可加入關注或轉去路線頁。` : `搵唔到「${raw}」，可改試更完整嘅站名或地址。`, parts.length ? 'ok' : 'error');
                     } catch (e) {
                         if (e && e.name === 'AbortError') return;
-                        this._setNearbyHint(e.message || '地址搜尋失敗', 'error');
-                        this.showToast(e.message || '地址搜尋失敗');
+                        this._setNearbyHint(e.message || '搜尋失敗', 'error');
+                        this.showToast(e.message || '搜尋失敗');
                     } finally {
                         btn.disabled = false;
                         btn.textContent = old;
