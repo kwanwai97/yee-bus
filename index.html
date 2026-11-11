@@ -167,8 +167,7 @@
                         <option value="NLB">嶼巴</option>
                     </select>
                     <div class="route-field">
-                        <input type="text" id="routeInput" placeholder="路線" autocomplete="off" enterkeyhint="search" aria-label="路線號碼">
-                        <button type="button" class="voice-btn" id="routeVoiceBtn" title="語音輸入路線" aria-label="語音輸入路線">🎤</button>
+                        <input type="text" id="routeInput" placeholder="路線" autocomplete="off" enterkeyhint="search" inputmode="numeric" aria-label="路線號碼">
                     </div>
                     <button class="dir-chip btn-outbound" id="expandOutBtn">🟢 正向</button>
                     <button class="dir-chip btn-inbound" id="expandInBtn">🔵 反向</button>
@@ -187,14 +186,14 @@
                 <div class="place-row">
                     <div class="place-field">
                         <input type="text" id="placeInput" placeholder="站名、地址或路線，例如佐敦" autocomplete="off" enterkeyhint="search" aria-label="搜尋站名、地址或路線">
-                        <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入搜尋" aria-label="語音輸入搜尋">🎤</button>
+                        <button type="button" class="voice-btn" id="placeVoiceBtn" title="語音輸入地址" aria-label="語音輸入地址">🎤</button>
                     </div>
                     <div class="place-actions">
                         <button id="placeSearchBtn" class="btn btn-place" type="button">搜尋</button>
                         <button id="nearbyGpsBtn" class="btn btn-nearby" type="button">📍 搵附近站</button>
                     </div>
                 </div>
-                <div class="quick-hint" id="nearbyHint">可搜站名、地址、路線，或用定位搵大約 400 米內嘅巴士站</div>
+                <div class="quick-hint" id="nearbyHint">可搜站名、地址、路線，或用定位搵約五至十分鐘步行（約 300 至 600 米）內嘅巴士站同路線</div>
                 <div id="nearbyResults" class="nearby-results" hidden></div>
             </div>
             <div id="voiceBar" class="voice-bar" hidden>
@@ -235,13 +234,14 @@
                 UI: {
                     refreshInterval: 30000,
                     debounceDelay: 400,
-                    walkSpeedMpm: 75,
+                    walkSpeedMpm: 60,
                     maxETAShow: 3,
                     nearestDistanceThreshold: 2000, // 放宽至2公里
                     maxConcurrentRequests: 6,
                     fetchTimeoutMs: 12000,
-                    nearbyRadiusM: 400,
-                    nearbyMaxStops: 25
+                    nearbyRadiusM: 600,
+                    nearbyMinRadiusM: 300,
+                    nearbyMaxStops: 40
                 },
                 GEOCODE: {
                     nominatim: 'https://nominatim.openstreetmap.org/search',
@@ -724,18 +724,49 @@
                     }
                     return out;
                 },
+                walkMins(dist) {
+                    const speed = CONFIG.UI.walkSpeedMpm || 60;
+                    if (!isFinite(dist) || dist < 0) return null;
+                    return Math.max(1, Math.ceil(dist / speed));
+                },
                 findNearby(lat, lng, radiusM, maxStops) {
                     const radius = radiusM || CONFIG.UI.nearbyRadiusM;
-                    const limit = maxStops || CONFIG.UI.nearbyMaxStops;
+                    const limit = (maxStops == null) ? CONFIG.UI.nearbyMaxStops : maxStops;
                     const hits = [];
                     for (const s of this.collectStops()) {
                         const dist = Utils.calcDistance(lat, lng, s.lat, s.lng);
                         if (!isFinite(dist) || dist > radius) continue;
                         if (!s.routes || s.routes.length === 0) continue;
-                        hits.push(Object.assign({}, s, { dist: Math.round(dist) }));
+                        hits.push(Object.assign({}, s, { dist: Math.round(dist), walkMins: this.walkMins(dist) }));
                     }
                     hits.sort((a, b) => a.dist - b.dist || a.stopName.localeCompare(b.stopName, 'zh-Hant'));
+                    if (!isFinite(limit)) return hits;
                     return hits.slice(0, limit);
+                },
+                nearbyRoutes(lat, lng, radiusM) {
+                    const stops = this.findNearby(lat, lng, radiusM, Infinity);
+                    const map = new Map();
+                    for (const stop of stops) {
+                        for (const route of stop.routes || []) {
+                            if (!route) continue;
+                            const key = `${stop.company}|${route}`;
+                            const prev = map.get(key);
+                            if (!prev || stop.dist < prev.dist) {
+                                map.set(key, {
+                                    company: stop.company,
+                                    route,
+                                    stopId: stop.stopId,
+                                    stopName: stop.stopName,
+                                    lat: stop.lat,
+                                    lng: stop.lng,
+                                    routeId: (stop.routeIds && stop.routeIds[route]) ? String(stop.routeIds[route]) : '',
+                                    dist: stop.dist,
+                                    walkMins: stop.walkMins != null ? stop.walkMins : this.walkMins(stop.dist)
+                                });
+                            }
+                        }
+                    }
+                    return [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
                 },
                 _norm(text) {
                     return String(text || '').toLowerCase().replace(/\s+/g, '');
@@ -1649,7 +1680,6 @@
                         tabExploreBtn: document.getElementById('tabExploreBtn'),
                         tabRoute: document.getElementById('tabRoute'),
                         tabExplore: document.getElementById('tabExplore'),
-                        routeVoiceBtn: document.getElementById('routeVoiceBtn'),
                         placeVoiceBtn: document.getElementById('placeVoiceBtn'),
                         voiceBar: document.getElementById('voiceBar'),
                         voiceBarText: document.getElementById('voiceBarText'),
@@ -1756,14 +1786,16 @@
                     });
                     this.elements.nearbyGpsBtn.addEventListener('click', () => this._searchNearbyByGps());
                     this.elements.nearbyResults.addEventListener('click', (e) => {
-                        const chip = e.target.closest('.nearby-chip');
-                        if (chip) this._addNearbyChip(chip);
+                        const chip = e.target.closest('.nearby-chip, .nearby-route-hit');
+                        if (chip) {
+                            this._addNearbyChip(chip);
+                            return;
+                        }
                         const hit = e.target.closest('.route-hit');
                         if (hit) this._openRouteFromHit(hit);
                     });
                     this.elements.tabRouteBtn.addEventListener('click', () => this._switchTab('route'));
                     this.elements.tabExploreBtn.addEventListener('click', () => this._switchTab('explore'));
-                    this.elements.routeVoiceBtn.addEventListener('click', () => this._toggleVoice('route'));
                     this.elements.placeVoiceBtn.addEventListener('click', () => this._toggleVoice('explore'));
                     this.elements.voiceCancelBtn.addEventListener('click', () => this._stopVoice('已取消語音輸入'));
                     this.elements.stationSelect.addEventListener('change', () => this._updateAddButton());
@@ -2279,8 +2311,7 @@
                     if (this.elements.searchPanel) {
                         this.elements.searchPanel.classList.toggle('no-voice', !ok);
                     }
-                    if (!ok) {
-                        this.elements.routeVoiceBtn.hidden = true;
+                    if (!ok && this.elements.placeVoiceBtn) {
                         this.elements.placeVoiceBtn.hidden = true;
                     }
                 }
@@ -2301,11 +2332,11 @@
                     if (explore) NearbyIndex.ensureCore().catch(() => {});
                 }
                 _setVoiceListening(on, message) {
-                    const btns = [this.elements.routeVoiceBtn, this.elements.placeVoiceBtn];
+                    const btns = [this.elements.placeVoiceBtn];
                     for (const btn of btns) {
                         if (!btn) continue;
                         btn.classList.toggle('listening', !!on);
-                        btn.title = on ? '停止語音輸入' : (btn.id === 'routeVoiceBtn' ? '語音輸入路線' : '語音輸入搜尋');
+                        btn.title = on ? '停止語音輸入' : '語音輸入地址';
                         btn.setAttribute('aria-label', btn.title);
                     }
                     if (this.elements.voiceBar) this.elements.voiceBar.hidden = !on;
@@ -2328,11 +2359,10 @@
                         this._stopVoice('已取消語音輸入');
                         return;
                     }
-                    if (which === 'explore') this._switchTab('explore');
-                    else this._switchTab('route');
-                    const input = which === 'explore' ? this.elements.placeInput : this.elements.routeInput;
+                    this._switchTab('explore');
+                    const input = this.elements.placeInput;
                     const started = VoiceInput.start(input, {
-                        onStart: () => this._setVoiceListening(true, which === 'explore' ? '正在聽緊，請講站名、地址或路線' : '正在聽緊，請講路線號碼'),
+                        onStart: () => this._setVoiceListening(true, '正在聽緊，請講地址或站名'),
                         onEnd: () => this._setVoiceListening(false),
                         onError: (err) => {
                             this._setVoiceListening(false);
@@ -2340,14 +2370,40 @@
                         },
                         onFinal: (text) => {
                             if (!text) return;
-                            if (which === 'explore') this._searchExplore();
-                            else this._onSearchInput();
+                            this._searchExplore();
                         }
                     });
                     if (!started) this._setVoiceListening(false);
                 }
                 _companyLabel(company) {
                     return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : '嶼巴';
+                }
+                _walkLabel(dist, walkMins) {
+                    const mins = (walkMins != null && isFinite(walkMins)) ? walkMins : NearbyIndex.walkMins(dist);
+                    if (mins == null || !isFinite(dist)) return '';
+                    return `約 ${mins} 分鐘（${dist}m）`;
+                }
+                _rangeHint() {
+                    return '約五至十分鐘步行（約 300 至 600 米）';
+                }
+                _nearbyRouteButtonHtml(r) {
+                    const co = this._companyLabel(r.company);
+                    const name = StopPlates.label(r.stopName || '', r.stopId);
+                    const walk = this._walkLabel(r.dist, r.walkMins);
+                    const meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
+                    const routeId = r.routeId || '';
+                    return `<button type="button" class="route-hit nearby-route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat}" data-lng="${r.lng}" data-route-id="${Utils.escapeHtml(routeId)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                }
+                _renderNearbyRouteSection(routes, originLabel) {
+                    const sec = document.createElement('div');
+                    sec.className = 'result-section';
+                    const where = originLabel ? `（${originLabel}）` : '';
+                    if (!routes || !routes.length) {
+                        sec.innerHTML = `<div class="result-title">附近路線${Utils.escapeHtml(where)}</div><div class="nearby-empty">喺${Utils.escapeHtml(originLabel || '呢個位置')}${this._rangeHint()}內搵唔到巴士路線</div>`;
+                        return sec;
+                    }
+                    sec.innerHTML = `<div class="result-title">附近路線${Utils.escapeHtml(where)} · 撳線即可加入關注</div>` + routes.map(r => this._nearbyRouteButtonHtml(r)).join('');
+                    return sec;
                 }
                 _openRouteFromHit(hit) {
                     const company = hit.dataset.company;
@@ -2368,7 +2424,8 @@
                         return `<button type="button" class="${cls}" data-company="${Utils.escapeHtml(stop.company)}" data-route="${Utils.escapeHtml(route)}" data-stop-id="${Utils.escapeHtml(stop.stopId)}" data-stop-name="${Utils.escapeHtml(stop.stopName)}" data-lat="${stop.lat}" data-lng="${stop.lng}" data-route-id="${Utils.escapeHtml(routeId)}">${Utils.escapeHtml(coLabel)} ${Utils.escapeHtml(route)}</button>`;
                     }).join('');
                     const name = StopPlates.label(stop.stopName || '', stop.stopId);
-                    const dist = (stop.dist != null && isFinite(stop.dist)) ? `<div class="nearby-stop-dist">${stop.dist}m</div>` : '';
+                    const walk = (stop.dist != null && isFinite(stop.dist)) ? this._walkLabel(stop.dist, stop.walkMins) : '';
+                    const dist = walk ? `<div class="nearby-stop-dist">${Utils.escapeHtml(walk)}</div>` : '';
                     return `
                         <div class="nearby-stop">
                             <div class="nearby-stop-head">
@@ -2385,36 +2442,17 @@
                     if (kind === 'ok') el.classList.add('active');
                     if (kind === 'error') el.classList.add('error');
                 }
-                _renderNearbyResults(hits, originLabel) {
+                _renderNearbyResults(hits, originLabel, nearbyRoutes) {
                     const box = this.elements.nearbyResults;
                     box.hidden = false;
                     box.innerHTML = '';
-                    if (!hits.length) {
-                        const empty = document.createElement('div');
-                        empty.className = 'nearby-empty';
-                        empty.textContent = `喺${originLabel || '呢個位置'}大約 ${CONFIG.UI.nearbyRadiusM} 米內搵唔到有路線嘅巴士站`;
-                        box.appendChild(empty);
-                        return;
-                    }
-                    for (const stop of hits) {
-                        const div = document.createElement('div');
-                        div.className = 'nearby-stop';
-                        const routes = [...new Set(stop.routes || [])];
-                        const chips = routes.map(route => {
-                            const cls = `nearby-chip badge-${String(stop.company || '').toLowerCase()}`;
-                            const routeId = (stop.routeIds && stop.routeIds[route]) ? String(stop.routeIds[route]) : '';
-                            const coLabel = stop.company === 'KMB' ? '九巴' : stop.company === 'CTB' ? '城巴' : '嶼巴';
-                            return `<button type="button" class="${cls}" data-company="${Utils.escapeHtml(stop.company)}" data-route="${Utils.escapeHtml(route)}" data-stop-id="${Utils.escapeHtml(stop.stopId)}" data-stop-name="${Utils.escapeHtml(stop.stopName)}" data-lat="${stop.lat}" data-lng="${stop.lng}" data-route-id="${Utils.escapeHtml(routeId)}">${Utils.escapeHtml(coLabel)} ${Utils.escapeHtml(route)}</button>`;
-                        }).join('');
-                        const name = StopPlates.label(stop.stopName || '', stop.stopId);
-                        div.innerHTML = `
-                            <div class="nearby-stop-head">
-                                <div class="nearby-stop-name">📍 ${Utils.escapeHtml(name)}</div>
-                                <div class="nearby-stop-dist">${stop.dist}m</div>
-                            </div>
-                            <div class="nearby-routes">${chips}</div>
-                        `;
-                        box.appendChild(div);
+                    const routes = nearbyRoutes || [];
+                    box.appendChild(this._renderNearbyRouteSection(routes, originLabel));
+                    if (hits && hits.length) {
+                        const sec = document.createElement('div');
+                        sec.className = 'result-section';
+                        sec.innerHTML = `<div class="result-title">附近站</div>` + hits.map(s => this._stopCardHtml(s)).join('');
+                        box.appendChild(sec);
                     }
                     const attrib = document.createElement('div');
                     attrib.className = 'nearby-attrib';
@@ -2428,21 +2466,23 @@
                     this.elements.nearbyResults.innerHTML = '<div class="nearby-empty loading-dots">正在配對附近車站</div>';
                     await NearbyIndex.ensureCore();
                     const hits = NearbyIndex.findNearby(lat, lng);
-                    this._renderNearbyResults(hits, originLabel);
+                    const nearbyRoutes = NearbyIndex.nearbyRoutes(lat, lng);
+                    this._renderNearbyResults(hits, originLabel, nearbyRoutes);
                     const nlbPending = NearbyIndex._nlbReady && NearbyIndex._nlb.length === 0 && !NearbyIndex._nlbFailed;
-                    const suffix = hits.length
-                        ? `搵到 ${hits.length} 個站（${CONFIG.UI.nearbyRadiusM} 米內）。撳路線即可加入關注。`
-                        : `喺「${originLabel}」${CONFIG.UI.nearbyRadiusM} 米內暫時搵唔到車站。`;
-                    this._setNearbyHint(nlbPending ? suffix + ' 嶼巴資料仍在載入。' : suffix, hits.length ? 'ok' : 'error');
+                    const suffix = nearbyRoutes.length
+                        ? `搵到 ${nearbyRoutes.length} 條路線、${hits.length} 個站（${this._rangeHint()}內）。撳路線即可加入關注。`
+                        : `喺「${originLabel}」${this._rangeHint()}內暫時搵唔到巴士路線。`;
+                    this._setNearbyHint(nlbPending ? suffix + ' 嶼巴資料仍在載入。' : suffix, nearbyRoutes.length ? 'ok' : 'error');
                     if (nlbPending) {
                         NearbyIndex.loadNLB().then(() => {
                             if (!this._nearbyOrigin) return;
                             const again = NearbyIndex.findNearby(this._nearbyOrigin.lat, this._nearbyOrigin.lng);
-                            this._renderNearbyResults(again, this._nearbyOrigin.label);
-                            this._setNearbyHint(again.length
-                                ? `搵到 ${again.length} 個站（${CONFIG.UI.nearbyRadiusM} 米內）。撳路線即可加入關注。`
-                                : `喺「${this._nearbyOrigin.label}」${CONFIG.UI.nearbyRadiusM} 米內暫時搵唔到車站。`,
-                                again.length ? 'ok' : 'error');
+                            const againRoutes = NearbyIndex.nearbyRoutes(this._nearbyOrigin.lat, this._nearbyOrigin.lng);
+                            this._renderNearbyResults(again, this._nearbyOrigin.label, againRoutes);
+                            this._setNearbyHint(againRoutes.length
+                                ? `搵到 ${againRoutes.length} 條路線、${again.length} 個站（${this._rangeHint()}內）。撳路線即可加入關注。`
+                                : `喺「${this._nearbyOrigin.label}」${this._rangeHint()}內暫時搵唔到巴士路線。`,
+                                againRoutes.length ? 'ok' : 'error');
                         }).catch(() => {});
                     }
                 }
@@ -2500,22 +2540,28 @@
                 async _searchNearbyByAddress() {
                     return this._searchExplore();
                 }
-                _renderExploreResults({ routes, stops, nearby, nearbyLabel, attrib }) {
+                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib }) {
                     const box = this.elements.nearbyResults;
                     box.hidden = false;
                     box.innerHTML = '';
-                    const hasAny = (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
+                    const hasNearbyRoutes = nearbyRoutes && nearbyRoutes.length;
+                    const hasAny = hasNearbyRoutes || (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
                     if (!hasAny) {
                         const empty = document.createElement('div');
                         empty.className = 'nearby-empty';
-                        empty.textContent = '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼';
+                        empty.textContent = nearbyLabel
+                            ? `喺「${nearbyLabel}」${this._rangeHint()}內搵唔到巴士路線，可改試更完整嘅地址`
+                            : '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼';
                         box.appendChild(empty);
                         return;
+                    }
+                    if (hasNearbyRoutes || nearbyLabel) {
+                        box.appendChild(this._renderNearbyRouteSection(nearbyRoutes || [], nearbyLabel));
                     }
                     if (routes && routes.length) {
                         const sec = document.createElement('div');
                         sec.className = 'result-section';
-                        sec.innerHTML = `<div class="result-title">路線</div>` + routes.map(r => {
+                        sec.innerHTML = `<div class="result-title">路線號碼相符</div>` + routes.map(r => {
                             const co = this._companyLabel(r.company);
                             const meta = (r.orig || r.dest) ? `${r.orig || '?'}${r.dest ? ' ⇄ ' + r.dest : ''}` : '撳呢度用呢條線搵站';
                             return `<button type="button" class="route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
@@ -2563,17 +2609,19 @@
                     try {
                         await NearbyIndex.ensureCore();
                         const origin = this.gps.isReady() ? { lat: this.gps.lat, lng: this.gps.lng } : null;
-                        const routes = await NearbyIndex.searchRoutes(raw);
-                        const stops = NearbyIndex.searchStops(raw, origin);
+                        const isRouteNo = NearbyIndex.looksLikeRoute(raw);
+                        let routes = isRouteNo ? await NearbyIndex.searchRoutes(raw) : [];
+                        const stops = isRouteNo ? [] : NearbyIndex.searchStops(raw, origin);
                         let nearby = [];
+                        let nearbyRoutes = [];
                         let nearbyLabel = '';
                         let attrib = '';
-                        const shouldGeocode = !NearbyIndex.looksLikeRoute(raw);
-                        if (shouldGeocode) {
-                            this._setNearbyHint(`已有本地結果，再試下將「${raw}」當成地址…`);
+                        if (!isRouteNo) {
+                            this._setNearbyHint(`正在將「${raw}」當成地址，即刻列出附近路線…`);
                             try {
                                 const geo = await Geocoder.search(raw, signal);
                                 if (geo) {
+                                    nearbyRoutes = NearbyIndex.nearbyRoutes(geo.lat, geo.lng);
                                     nearby = NearbyIndex.findNearby(geo.lat, geo.lng);
                                     nearbyLabel = geo.label;
                                     attrib = '地址搜尋用 OpenStreetMap Nominatim，必要時改用 Photon';
@@ -2581,13 +2629,18 @@
                             } catch (e) {
                                 if (e && e.name === 'AbortError') throw e;
                             }
+                            if (!nearbyRoutes.length && !stops.length) {
+                                const extra = await NearbyIndex.searchRoutes(raw);
+                                routes.push(...extra);
+                            }
                         }
-                        this._renderExploreResults({ routes, stops, nearby, nearbyLabel, attrib });
+                        this._renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib });
                         const parts = [];
-                        if (routes.length) parts.push(`${routes.length} 條路線`);
+                        if (nearbyRoutes.length) parts.push(`${nearbyRoutes.length} 條附近路線`);
+                        if (routes.length) parts.push(`${routes.length} 條相符路線`);
                         if (stops.length) parts.push(`${stops.length} 個車站`);
                         if (nearby.length) parts.push(`${nearby.length} 個附近站`);
-                        this._setNearbyHint(parts.length ? `搵到 ${parts.join('、')}。撳路線可加入關注或轉去路線頁。` : `搵唔到「${raw}」，可改試更完整嘅站名或地址。`, parts.length ? 'ok' : 'error');
+                        this._setNearbyHint(parts.length ? `搵到 ${parts.join('、')}。撳附近路線即可加入關注。` : `搵唔到「${raw}」，可改試更完整嘅站名或地址。`, parts.length ? 'ok' : 'error');
                     } catch (e) {
                         if (e && e.name === 'AbortError') return;
                         this._setNearbyHint(e.message || '搜尋失敗', 'error');
