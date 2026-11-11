@@ -115,6 +115,7 @@
         .nearby-chip.badge-kmb { background: #d63333; }
         .nearby-chip.badge-ctb { background: #f59f00; color: #212529; }
         .nearby-chip.badge-nlb { background: #1c7ed6; }
+        .nearby-chip.badge-mtr, .route-hit .badge-mtr { background: #e4002b; }
         .nearby-attrib { font-size: 0.62rem; color: #adb5bd; margin-top: 6px; text-align: right; }
         .nearby-empty { text-align: center; color: #868e96; font-size: 0.8rem; padding: 10px 0; }
         .search-tabs { display: flex; background: #e9ecef; border-radius: 12px; padding: 3px; margin-bottom: 12px; gap: 0; }
@@ -241,7 +242,13 @@
                     fetchTimeoutMs: 12000,
                     nearbyRadiusM: 600,
                     nearbyMinRadiusM: 300,
-                    nearbyMaxStops: 40
+                    nearbyMaxStops: 40,
+                    mtrWalkM: 800,
+                    transferWalkM: 250,
+                    transferLinkWalkM: 400,
+                    transferMaxOriginRoutes: 10,
+                    transferMaxDestRoutes: 10,
+                    transferMaxMidRoutes: 8
                 },
                 GEOCODE: {
                     als: 'https://www.als.gov.hk/lookup',
@@ -940,7 +947,7 @@
                 _inHK(lat, lon) {
                     return lat >= 22.12 && lat <= 22.58 && lon >= 113.75 && lon <= 114.52;
                 },
-                _areas: ['西營盤','堅尼地城','尖沙咀','銅鑼灣','黃竹坑','荔枝角','長沙灣','深水埗','石硤尾','九龍塘','九龍城','何文田','紅磡','土瓜灣','新蒲崗','鑽石山','黃大仙','橫頭磡','慈雲山','牛頭角','九龍灣','將軍澳','調景嶺','天水圍','馬鞍山','清水灣','鰂魚涌','西灣河','筲箕灣','杏花邨','小西灣','香港仔','鴨脷洲','淺水灣','油麻地','美孚','樂富','彩虹','藍田','油塘','坑口','寶琳','康城','葵涌','葵芳','青衣','屯門','元朗','錦田','大埔','太和','粉嶺','上水','大圍','火炭','東涌','欣澳','西貢','長洲','坪洲','梅窩','南丫','炮台山','天后','大坑','灣仔','金鐘','中環','上環','薄扶林','赤柱','海怡','佐敦','旺角','太子','觀塘','荃灣','沙田','北角','太古','柴灣','朗屏','兆康','大學','迪士尼','烏溪沙'],
+                _areas: ['西營盤','堅尼地城','尖沙咀','銅鑼灣','黃竹坑','荔枝角','長沙灣','深水埗','石硤尾','九龍塘','九龍城','何文田','紅磡','土瓜灣','新蒲崗','鑽石山','黃大仙','橫頭磡','慈雲山','牛頭角','九龍灣','將軍澳','調景嶺','天水圍','馬鞍山','清水灣','鰂魚涌','西灣河','筲箕灣','杏花邨','小西灣','香港仔','鴨脷洲','淺水灣','油麻地','美孚','樂富','彩虹','藍田','油塘','坑口','寶琳','康城','葵涌','葵芳','青衣','屯門','元朗','錦田','大埔','太和','粉嶺','上水','大圍','火炭','東涌','欣澳','大澳','西貢','長洲','坪洲','梅窩','南丫','加路連山','炮台山','天后','大坑','灣仔','金鐘','中環','上環','薄扶林','赤柱','海怡','佐敦','旺角','太子','觀塘','荃灣','沙田','北角','太古','柴灣','朗屏','兆康','大學','迪士尼','烏溪沙'],
                 _streetPat: /[^\d\s,，、]{1,8}(?:大道[東西中]?|大街|公路|道[東西南北]?|街|路|里|巷)/g,
                 _suffixOnly: /^(大道[東西中]?|大街|公路|道[東西南北]?|街|路|里|巷)$/,
                 _parseQuery(query) {
@@ -1001,7 +1008,16 @@
                     if (!streets || !streets.length) return false;
                     const name = String(row.streetName || '');
                     if (!name) return false;
-                    return streets.some(s => name === s || name.includes(s) || s.includes(name));
+                    return streets.some(s => {
+                        if (!s) return false;
+                        if (name === s) return true;
+                        // 唔好用後綴包含：例如「家路」唔可以配中「聖家路」
+                        if (name.endsWith(s) && name.length > s.length) return false;
+                        if (s.endsWith(name) && s.length > name.length) return false;
+                        if (name.startsWith(s)) return true;
+                        if (s.length >= 4 && name.includes(s)) return true;
+                        return false;
+                    });
                 },
                 _textHas(row, token) {
                     if (!token) return false;
@@ -1107,6 +1123,18 @@
                         return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
                     }
 
+                    const isAreaOnly = parsed.area && !parsed.streets.length && !parsed.number;
+                    if (isAreaOnly) {
+                        const stationRows = rows.filter(r => {
+                            const blob = `${r.building || ''}${r.estate || ''}${r.label || ''}`;
+                            return blob.includes(`港鐵${parsed.area}站`) || blob.includes(`${parsed.area}鐵路站`) || blob.includes(`港鐵${parsed.area}`);
+                        });
+                        if (stationRows.length) {
+                            const best = stationRows.slice().sort((a, b) => b.score - a.score)[0];
+                            return { lat: best.lat, lng: best.lng, label: `港鐵${parsed.area}站`, source: 'ALS' };
+                        }
+                    }
+
                     const best = rows.slice().sort((a, b) => b.score - a.score)[0];
                     return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
                 },
@@ -1175,16 +1203,37 @@
                     }
                     return null;
                 },
+                _aliases: { '家路': '加路連山道', '家路道': '加路連山道' },
                 async search(query, signal) {
                     const q0 = String(query || '').trim();
                     if (!q0) throw new Error('請輸入地址或地區名稱');
                     let lastErr = null;
-                    try {
-                        const hit = await this._als(q0, signal);
-                        if (hit) return hit;
-                    } catch (e) {
-                        if (e && e.name === 'AbortError') throw e;
-                        lastErr = e;
+                    const parsed0 = this._parseQuery(q0);
+                    const alias = this._aliases[q0] || this._aliases[q0.replace(/\s+/g, '')];
+                    const isAreaOnly = parsed0.area && !parsed0.streets.length && !parsed0.number
+                        && q0.replace(/站$/, '') === parsed0.area;
+                    const alsTries = [];
+                    if (alias) alsTries.push(alias);
+                    if (isAreaOnly) {
+                        alsTries.push(`港鐵${parsed0.area}站`);
+                        alsTries.push(`${parsed0.area}站`);
+                    }
+                    alsTries.push(q0);
+                    const seenQ = new Set();
+                    for (const q of alsTries) {
+                        if (!q || seenQ.has(q)) continue;
+                        seenQ.add(q);
+                        try {
+                            const hit = await this._als(q, signal);
+                            if (hit) {
+                                if (alias && q === alias) hit.label = alias;
+                                if (isAreaOnly && q.indexOf('港鐵') === 0) hit.label = `港鐵${parsed0.area}站`;
+                                return hit;
+                            }
+                        } catch (e) {
+                            if (e && e.name === 'AbortError') throw e;
+                            lastErr = e;
+                        }
                     }
                     const variants = [q0];
                     if (!/[香港九龍新界港島]|Hong Kong|Kowloon/i.test(q0)) {
@@ -1214,6 +1263,165 @@
                     return null;
                 }
             };
+
+            const MTRIndex = (() => {
+                const data = {"stations":{"AWE":{"n":"博覽館","lat":22.3219,"lng":113.94222},"AIR":{"n":"機場","lat":22.31601,"lng":113.93638},"TSY":{"n":"青衣","lat":22.35833,"lng":114.10695},"KOW":{"n":"九龍","lat":22.30494,"lng":114.16205},"HOK":{"n":"香港","lat":22.2843,"lng":114.15783},"SUN":{"n":"欣澳","lat":22.33192,"lng":114.02885},"DIS":{"n":"迪士尼","lat":22.31535,"lng":114.04494},"LOW":{"n":"羅湖","lat":22.52825,"lng":114.1135},"SHS":{"n":"上水","lat":22.50132,"lng":114.12786},"FAN":{"n":"粉嶺","lat":22.49211,"lng":114.13874},"TWO":{"n":"太和","lat":22.45102,"lng":114.16097},"TAP":{"n":"大埔墟","lat":22.44442,"lng":114.17053},"UNI":{"n":"大學","lat":22.41372,"lng":114.2102},"FOT":{"n":"火炭","lat":22.39515,"lng":114.19805},"SHT":{"n":"沙田","lat":22.38241,"lng":114.18744},"TAW":{"n":"大圍","lat":22.3731,"lng":114.17864},"KOT":{"n":"九龍塘","lat":22.33701,"lng":114.17577},"MKK":{"n":"旺角東","lat":22.32219,"lng":114.1726},"HUH":{"n":"紅磡","lat":22.30189,"lng":114.18236},"EXC":{"n":"會展","lat":22.28159,"lng":114.17552},"ADM":{"n":"金鐘","lat":22.27848,"lng":114.1661},"LMC":{"n":"落馬洲","lat":22.51492,"lng":114.06577},"CHW":{"n":"柴灣","lat":22.26492,"lng":114.23727},"HFC":{"n":"杏花邨","lat":22.27663,"lng":114.23976},"SKW":{"n":"筲箕灣","lat":22.27936,"lng":114.22924},"SWH":{"n":"西灣河","lat":22.28195,"lng":114.22223},"TAK":{"n":"太古","lat":22.28497,"lng":114.21633},"QUB":{"n":"鰂魚涌","lat":22.28878,"lng":114.20874},"NOP":{"n":"北角","lat":22.29107,"lng":114.20039},"FOH":{"n":"炮台山","lat":22.28791,"lng":114.19382},"TIH":{"n":"天后","lat":22.28251,"lng":114.19177},"CAB":{"n":"銅鑼灣","lat":22.27983,"lng":114.18363},"WAC":{"n":"灣仔","lat":22.27755,"lng":114.17301},"CEN":{"n":"中環","lat":22.28185,"lng":114.15842},"SHW":{"n":"上環","lat":22.28694,"lng":114.15171},"SYP":{"n":"西營盤","lat":22.28618,"lng":114.14313},"HKU":{"n":"香港大學","lat":22.2845,"lng":114.13536},"KET":{"n":"堅尼地城","lat":22.2813,"lng":114.1286},"TIK":{"n":"調景嶺","lat":22.30396,"lng":114.25216},"YAT":{"n":"油塘","lat":22.29814,"lng":114.23694},"LAT":{"n":"藍田","lat":22.30702,"lng":114.23303},"KWT":{"n":"觀塘","lat":22.31208,"lng":114.2265},"NTK":{"n":"牛頭角","lat":22.3156,"lng":114.21893},"KOB":{"n":"九龍灣","lat":22.32316,"lng":114.21408},"CHH":{"n":"彩虹","lat":22.33454,"lng":114.20916},"DIH":{"n":"鑽石山","lat":22.33975,"lng":114.20157},"WTS":{"n":"黃大仙","lat":22.34166,"lng":114.19413},"LOF":{"n":"樂富","lat":22.33796,"lng":114.18712},"SKM":{"n":"石硤尾","lat":22.33176,"lng":114.16885},"PRE":{"n":"太子","lat":22.32449,"lng":114.16832},"MOK":{"n":"旺角","lat":22.3196,"lng":114.16934},"YMT":{"n":"油麻地","lat":22.31303,"lng":114.1706},"HOM":{"n":"何文田","lat":22.30981,"lng":114.18282},"WHA":{"n":"黃埔","lat":22.30426,"lng":114.19091},"WKS":{"n":"烏溪沙","lat":22.42924,"lng":114.244},"MOS":{"n":"馬鞍山","lat":22.4249,"lng":114.23154},"HEO":{"n":"恆安","lat":22.41758,"lng":114.22575},"TSH":{"n":"大水坑","lat":22.40806,"lng":114.22259},"SHM":{"n":"石門","lat":22.38773,"lng":114.20832},"CIO":{"n":"第一城","lat":22.38309,"lng":114.20373},"STW":{"n":"沙田圍","lat":22.37703,"lng":114.19499},"CKT":{"n":"車公廟","lat":22.37477,"lng":114.1864},"HIK":{"n":"顯徑","lat":22.36382,"lng":114.17081},"KAT":{"n":"啟德","lat":22.33105,"lng":114.20006},"SUW":{"n":"宋皇臺","lat":22.32701,"lng":114.1906},"TKW":{"n":"土瓜灣","lat":22.31686,"lng":114.18761},"ETS":{"n":"尖東","lat":22.29665,"lng":114.17319},"AUS":{"n":"柯士甸","lat":22.3037,"lng":114.16713},"NAC":{"n":"南昌","lat":22.32649,"lng":114.15359},"MEF":{"n":"美孚","lat":22.33816,"lng":114.13748},"TWW":{"n":"荃灣西","lat":22.36811,"lng":114.11},"KSR":{"n":"錦上路","lat":22.43464,"lng":114.06342},"YUL":{"n":"元朗","lat":22.44622,"lng":114.03545},"LOP":{"n":"朗屏","lat":22.44774,"lng":114.02555},"TIS":{"n":"天水圍","lat":22.44824,"lng":114.00486},"SIH":{"n":"兆康","lat":22.4122,"lng":113.97877},"TUM":{"n":"屯門","lat":22.39487,"lng":113.9732},"TUC":{"n":"東涌","lat":22.28929,"lng":113.94148},"LAK":{"n":"茘景","lat":22.34848,"lng":114.12613},"OLY":{"n":"奧運","lat":22.31729,"lng":114.161},"POA":{"n":"寶琳","lat":22.3225,"lng":114.25782},"HAH":{"n":"坑口","lat":22.31554,"lng":114.26435},"TKO":{"n":"將軍澳","lat":22.30752,"lng":114.25995},"LHP":{"n":"康城","lat":22.29541,"lng":114.2684},"TSW":{"n":"荃灣","lat":22.37362,"lng":114.11796},"TWH":{"n":"大窩口","lat":22.37079,"lng":114.12515},"KWH":{"n":"葵興","lat":22.36307,"lng":114.13124},"KWF":{"n":"葵芳","lat":22.35691,"lng":114.12774},"LCK":{"n":"茘枝角","lat":22.33689,"lng":114.14841},"CSW":{"n":"長沙灣","lat":22.33526,"lng":114.1566},"SSP":{"n":"深水埗","lat":22.33069,"lng":114.16237},"JOR":{"n":"佐敦","lat":22.30494,"lng":114.17176},"TST":{"n":"尖沙咀","lat":22.297,"lng":114.17224},"OCP":{"n":"海洋公園","lat":22.24869,"lng":114.17439},"WCH":{"n":"黃竹坑","lat":22.24815,"lng":114.16745},"LET":{"n":"利東","lat":22.2426,"lng":114.15571},"SOH":{"n":"海怡半島","lat":22.2426,"lng":114.14899}},"seqs":{"AEL":[["AWE","AIR","TSY","KOW","HOK"]],"DRL":[["SUN","DIS"]],"EAL":[["LOW","SHS","FAN","TWO","TAP","UNI","FOT","SHT","TAW","KOT","MKK","HUH","EXC","ADM"],["LMC","SHS","FAN","TWO","TAP","UNI","FOT","SHT","TAW","KOT","MKK","HUH","EXC","ADM"]],"ISL":[["CHW","HFC","SKW","SWH","TAK","QUB","NOP","FOH","TIH","CAB","WAC","ADM","CEN","SHW","SYP","HKU","KET"]],"KTL":[["TIK","YAT","LAT","KWT","NTK","KOB","CHH","DIH","WTS","LOF","KOT","SKM","PRE","MOK","YMT","HOM","WHA"]],"TML":[["TUM","SIH","TIS","LOP","YUL","KSR","TWW","MEF","NAC","AUS","ETS","HUH","HOM","TKW","SUW","KAT","DIH","HIK","TAW","CKT","STW","CIO","SHM","TSH","HEO","MOS","WKS"]],"TCL":[["TUC","SUN","TSY","LAK","NAC","OLY","KOW","HOK"]],"TKL":[["POA","HAH","TKO","TIK","YAT","QUB","NOP"],["LHP","TKO","TIK"]],"TWL":[["TSW","TWH","KWH","KWF","LAK","MEF","LCK","CSW","SSP","PRE","MOK","YMT","JOR","TST","ADM","CEN"]],"SIL":[["SOH","LET","WCH","OCP","ADM"]]}};
+                const LINE_NAME = { AEL:'機場快綫', DRL:'迪士尼綫', EAL:'東鐵綫', ISL:'港島綫', KTL:'觀塘綫', TML:'屯馬綫', TCL:'東涌綫', TKL:'將軍澳綫', TWL:'荃灣綫', SIL:'南港島綫' };
+                return {
+                    stations: data.stations,
+                    seqs: data.seqs,
+                    _graph: null,
+                    _linesAt: null,
+                    _ensure() {
+                        if (this._graph) return;
+                        const graph = {};
+                        const linesAt = {};
+                        for (const line of Object.keys(this.seqs)) {
+                            for (const seq of this.seqs[line]) {
+                                for (let i = 0; i < seq.length; i++) {
+                                    const c = seq[i];
+                                    if (!linesAt[c]) linesAt[c] = [];
+                                    if (!linesAt[c].includes(line)) linesAt[c].push(line);
+                                    if (!i) continue;
+                                    const a = seq[i - 1], b = seq[i];
+                                    (graph[a] = graph[a] || []).push({ to: b, line });
+                                    (graph[b] = graph[b] || []).push({ to: a, line });
+                                }
+                            }
+                        }
+                        this._graph = graph;
+                        this._linesAt = linesAt;
+                    },
+                    lineName(code) { return LINE_NAME[code] || code; },
+                    nearest(lat, lng, maxM) {
+                        this._ensure();
+                        const cap = maxM || 800;
+                        let best = null;
+                        for (const code of Object.keys(this.stations)) {
+                            const s = this.stations[code];
+                            const d = Utils.calcDistance(lat, lng, s.lat, s.lng);
+                            if (!isFinite(d) || d > cap) continue;
+                            if (!best || d < best.dist) best = { code, name: s.n, lat: s.lat, lng: s.lng, dist: Math.round(d) };
+                        }
+                        return best;
+                    },
+                    path(fromCode, toCode) {
+                        this._ensure();
+                        if (!fromCode || !toCode) return null;
+                        if (fromCode === toCode) {
+                            const s = this.stations[fromCode];
+                            return { mins: 0, stations: [fromCode], names: [s ? s.n : fromCode], segments: [], transfers: 0 };
+                        }
+                        const graph = this._graph, linesAt = this._linesAt;
+                        const dist = new Map();
+                        const prev = new Map();
+                        const key = (c, l) => c + '|' + l;
+                        let bestD = Infinity, bestK = null;
+                        const heap = [];
+                        const push = (d, c, l) => { heap.push({ d, c, l }); };
+                        const pop = () => {
+                            let ix = 0;
+                            for (let i = 1; i < heap.length; i++) if (heap[i].d < heap[ix].d) ix = i;
+                            return heap.splice(ix, 1)[0];
+                        };
+                        for (const line of (linesAt[fromCode] || [])) {
+                            dist.set(key(fromCode, line), 0);
+                            push(0, fromCode, line);
+                        }
+                        const seen = new Set();
+                        while (heap.length) {
+                            const cur = pop();
+                            const k = key(cur.c, cur.l);
+                            if (seen.has(k)) continue;
+                            seen.add(k);
+                            if (cur.c === toCode && cur.d < bestD) { bestD = cur.d; bestK = k; }
+                            if (cur.d > bestD) continue;
+                            for (const e of (graph[cur.c] || [])) {
+                                if (e.line !== cur.l) continue;
+                                const nd = cur.d + 2;
+                                const nk = key(e.to, cur.l);
+                                if (nd < (dist.has(nk) ? dist.get(nk) : Infinity)) {
+                                    dist.set(nk, nd);
+                                    prev.set(nk, { c: cur.c, l: cur.l, via: 'ride' });
+                                    push(nd, e.to, cur.l);
+                                }
+                            }
+                            for (const line of (linesAt[cur.c] || [])) {
+                                if (line === cur.l) continue;
+                                const nd = cur.d + 4;
+                                const nk = key(cur.c, line);
+                                if (nd < (dist.has(nk) ? dist.get(nk) : Infinity)) {
+                                    dist.set(nk, nd);
+                                    prev.set(nk, { c: cur.c, l: cur.l, via: 'xfer' });
+                                    push(nd, cur.c, line);
+                                }
+                            }
+                        }
+                        if (!bestK || !isFinite(bestD)) return null;
+                        const chain = [];
+                        let k = bestK;
+                        while (k) {
+                            const parts = k.split('|');
+                            chain.push({ code: parts[0], line: parts[1] });
+                            const p = prev.get(k);
+                            if (!p) break;
+                            k = key(p.c, p.l);
+                        }
+                        chain.reverse();
+                        const stations = [];
+                        const segments = [];
+                        for (const step of chain) {
+                            if (!stations.length || stations[stations.length - 1] !== step.code) stations.push(step.code);
+                            const last = segments[segments.length - 1];
+                            if (!last || last.line !== step.line) segments.push({ line: step.line, from: step.code, to: step.code, stops: [step.code] });
+                            else {
+                                last.to = step.code;
+                                if (last.stops[last.stops.length - 1] !== step.code) last.stops.push(step.code);
+                            }
+                        }
+                        const usable = segments.filter(s => s.from !== s.to);
+                        const names = stations.map(c => (this.stations[c] && this.stations[c].n) || c);
+                        return { mins: bestD, stations, names, segments: usable, transfers: Math.max(0, usable.length - 1) };
+                    },
+                    journey(origin, dest) {
+                        if (!origin || !dest) return null;
+                        const maxWalk = (CONFIG.UI.mtrWalkM || 800);
+                        const from = this.nearest(origin.lat, origin.lng, maxWalk);
+                        const to = this.nearest(dest.lat, dest.lng, maxWalk);
+                        if (!from || !to) return null;
+                        if (from.code === to.code) return null;
+                        const route = this.path(from.code, to.code);
+                        if (!route) return null;
+                        const walkMins = (NearbyIndex.walkMins(from.dist) || 0) + (NearbyIndex.walkMins(to.dist) || 0);
+                        const xferNames = [];
+                        for (let i = 1; i < route.segments.length; i++) {
+                            const name = (this.stations[route.segments[i].from] || {}).n;
+                            if (name) xferNames.push(name + '轉' + this.lineName(route.segments[i].line));
+                        }
+                        const firstLine = route.segments[0] ? this.lineName(route.segments[0].line) : '地鐵';
+                        const via = xferNames.length ? ('（' + xferNames.join('，') + '）') : (firstLine ? ('（' + firstLine + '）') : '');
+                        const summary = '步行至' + from.name + '站，地鐵往' + to.name + via + '，再步行至目的地';
+                        return {
+                            kind: 'mtr',
+                            company: 'MTR',
+                            route: '地鐵',
+                            stopId: '',
+                            stopName: from.name,
+                            lat: from.lat,
+                            lng: from.lng,
+                            dist: from.dist,
+                            walkMins: NearbyIndex.walkMins(from.dist),
+                            destStopName: to.name,
+                            destDist: to.dist,
+                            destWalkMins: NearbyIndex.walkMins(to.dist),
+                            rideMins: Math.max(1, route.mins),
+                            totalWalkMins: walkMins,
+                            summary,
+                            variantDest: to.name
+                        };
+                    }
+                };
+            })();
 
             const VoiceInput = {
                 _rec: null,
@@ -2650,7 +2858,7 @@
                     if (!started) this._setVoiceListening(false);
                 }
                 _companyLabel(company) {
-                    return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : '嶼巴';
+                    return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : company === 'MTR' ? '地鐵' : '嶼巴';
                 }
                 _walkLabel(dist, walkMins) {
                     const mins = (walkMins != null && isFinite(walkMins)) ? walkMins : NearbyIndex.walkMins(dist);
@@ -2666,7 +2874,11 @@
                     const walk = this._walkLabel(r.dist, r.walkMins);
                     const destName = r.destStopName ? StopPlates.label(r.destStopName, r.destStopId) : '';
                     let meta;
-                    if (r.kind === 'journey') {
+                    if (r.kind === 'mtr' || r.kind === 'transfer') {
+                        const ride = r.rideMins ? ` · 車程約${r.rideMins}分鐘` : '';
+                        const walkBit = (r.totalWalkMins != null && isFinite(r.totalWalkMins)) ? `，步行約${r.totalWalkMins}分鐘` : (walk ? `，${walk}` : '');
+                        meta = `${r.summary || ''}${ride}${walkBit}`;
+                    } else if (r.kind === 'journey') {
                         const board = walk ? `上：${name}，${walk}` : `上：${name}`;
                         const towards = r.variantDest ? `（往${r.variantDest}）` : '';
                         const ride = r.rideMins ? ` · 車程約${r.rideMins}分鐘` : '';
@@ -2677,7 +2889,9 @@
                     const routeId = r.routeId || '';
                     const dir = r.direction || '';
                     const destId = r.destStopId || '';
-                    return `<button type="button" class="route-hit nearby-route-hit" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat}" data-lng="${r.lng}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}"><span class="badge badge-${String(r.company).toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(r.route)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                    const kind = r.kind || '';
+                    const label = (r.kind === 'mtr') ? '地鐵' : (r.kind === 'transfer' ? (r.routeLabel || '轉乘') : r.route);
+                    return `<button type="button" class="route-hit nearby-route-hit" data-kind="${Utils.escapeHtml(kind)}" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat || ''}" data-lng="${r.lng || ''}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}" data-summary="${Utils.escapeHtml(r.summary || '')}"><span class="badge badge-${String(r.company || '').toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(label)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
                 }
                 _renderNearbyRouteSection(routes, originLabel, mode) {
                     const sec = document.createElement('div');
@@ -2934,6 +3148,7 @@
                         let journeys = [];
                         let destLabel = '';
                         let fromHere = false;
+                        let dest = null;
                         if (isRouteNo) {
                             if (!origin) {
                                 this._setNearbyHint(`正在取得而家位置，再配對「${raw}」附近可以上嘅方向…`);
@@ -2995,7 +3210,6 @@
                                 this._renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib });
                                 return;
                             }
-                            let dest = null;
                             try {
                                 dest = await Geocoder.search(raw, signal);
                             } catch (e) {
@@ -3013,30 +3227,53 @@
                                 }
                                 this._setNearbyHint(`已定位目的地「${destLabel}」，正在搵附近行得到、可以去到嘅路線…`);
                                 journeys = NearbyIndex.routesToDestination(origin.lat, origin.lng, dest.lat, dest.lng);
-                                attrib = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap';
+                                attrib = '地址定位用政府地址搜尋服務，必要時再用 OpenStreetMap；地鐵站位置用政府空間數據中心車站範圍';
                             }
                             if (!journeys.length && !stops.length) {
                                 const extra = await NearbyIndex.searchRoutes(raw);
                                 routes.push(...extra);
                             }
                         }
-                        if (destLabel && journeys.length) {
-                            this._setNearbyHint(`已定位目的地「${destLabel}」，正在核對行車方向，確保落車站喺去目的地嗰邊…`);
-                            await this._refineJourneys(journeys, signal, destLabel, { routes: [], stops: [], attrib });
-                        } else if (fromHere) {
+                        if (fromHere) {
                             this._renderExploreResults({ routes: [], stops: [], journeys, destLabel: '', nearby: [], nearbyRoutes: [], nearbyLabel: raw, attrib: '', fromHere: true });
                             this._setNearbyHint(journeys.length
                                 ? `「${raw}」由而家附近行得到嘅上車點已按距離排序，並已核對方向。撳線即可加入上車那站。`
                                 : `附近${this._rangeHint()}內暫時搵唔到可以上「${raw}」嘅車站。`,
                                 journeys.length ? 'ok' : 'error');
+                        } else if (destLabel) {
+                            let confirmed = journeys || [];
+                            if (confirmed.length) {
+                                this._setNearbyHint(`已定位目的地「${destLabel}」，正在核對行車方向，確保落車站喺去目的地嗰邊…`);
+                                confirmed = await this._refineJourneys(confirmed, signal, destLabel, { routes: [], stops: [], attrib, render: false }) || [];
+                            }
+                            const extras = [];
+                            const mtr = dest ? MTRIndex.journey(origin, dest) : null;
+                            if (mtr) extras.push(mtr);
+                            if (!confirmed.length) {
+                                this._setNearbyHint(`已定位目的地「${destLabel}」，附近冇直達巴士，正在搵轉乘同地鐵…`);
+                                const more = await this._findTransfers(origin, dest, signal);
+                                if (more && more.length) extras.push(...more.filter(x => x && x.kind !== 'mtr'));
+                            }
+                            journeys = extras.filter(x => x && x.kind === 'mtr').concat(confirmed, extras.filter(x => x && x.kind !== 'mtr'));
+                            this._renderExploreResults({ routes: [], stops: [], journeys, destLabel, nearby: [], nearbyRoutes: [], nearbyLabel: '', attrib });
+                            const busN = confirmed.length;
+                            const xferN = journeys.filter(x => x && (x.kind === 'mtr' || x.kind === 'transfer')).length;
+                            if (journeys.length) {
+                                this._setNearbyHint(
+                                    busN
+                                        ? `已定位目的地「${destLabel}」，直達路線 ${busN} 條${xferN ? '，另有地鐵／轉乘' : ''}，已核對方向。撳線即可加入上車那站。`
+                                        : `已定位目的地「${destLabel}」，冇直達巴士，已列出地鐵或轉乘。`,
+                                    'ok'
+                                );
+                            } else {
+                                this._setNearbyHint(`已定位目的地「${destLabel}」，附近${this._rangeHint()}內暫時搵唔到直達或轉乘。`, 'error');
+                            }
                         } else {
                             this._renderExploreResults({ routes, stops, journeys, destLabel, nearby, nearbyRoutes, nearbyLabel, attrib });
-                            this._setNearbyHint(destLabel
-                                ? `已定位目的地「${destLabel}」，但附近${this._rangeHint()}內暫時搵唔到直達路線。`
-                                : (routes.length || stops.length
-                                    ? `搵到${routes.length ? ' ' + routes.length + ' 條相符路線' : ''}${stops.length ? '、' + stops.length + ' 個車站' : ''}。`
-                                    : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`),
-                                destLabel || routes.length || stops.length ? 'error' : 'error');
+                            this._setNearbyHint(routes.length || stops.length
+                                ? `搵到${routes.length ? ' ' + routes.length + ' 條相符路線' : ''}${stops.length ? '、' + stops.length + ' 個車站' : ''}。`
+                                : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`,
+                                routes.length || stops.length ? 'error' : 'error');
                         }
                     } catch (e) {
                         if (e && e.name === 'AbortError') return;
@@ -3047,7 +3284,387 @@
                         btn.textContent = old;
                     }
                 }
-                _closestStopOnRoute(stops, lat, lng, maxM) {
+
+                _routeKey(company, route) {
+                    return `${company}|${route}`;
+                }
+                async _stopListsForRoutes(rows, signal) {
+                    const uniq = [];
+                    const seen = new Set();
+                    for (const r of rows || []) {
+                        const key = this._routeKey(r.company, r.route);
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        uniq.push(r);
+                    }
+                    const tasks = uniq.map(r => async () => {
+                        try {
+                            const stops = await BusAPI.getStops(r.company, r.route, null, signal);
+                            return { company: r.company, route: r.route, stops: (stops && !stops.error) ? stops : [] };
+                        } catch (e) {
+                            if (e && e.name === 'AbortError') throw e;
+                            return { company: r.company, route: r.route, stops: [] };
+                        }
+                    });
+                    return Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
+                }
+                _groupRouteDirs(stops) {
+                    const groups = new Map();
+                    for (const s of stops || []) {
+                        if (!s || s.error) continue;
+                        const dir = s.direction === 'inbound' ? 'inbound' : 'outbound';
+                        const st = String(s.serviceType || 1);
+                        const key = `${dir}|${st}`;
+                        if (!groups.has(key)) groups.set(key, []);
+                        groups.get(key).push(s);
+                    }
+                    return groups;
+                }
+                _topNearbyRoutes(lat, lng, cap) {
+                    const radius = CONFIG.UI.nearbyRadiusM || 600;
+                    const stops = NearbyIndex.findNearby(lat, lng, radius, Infinity);
+                    const map = new Map();
+                    for (const stop of stops) {
+                        for (const route of stop.routes || []) {
+                            if (!route) continue;
+                            const key = this._routeKey(stop.company, route);
+                            const prev = map.get(key);
+                            if (!prev || stop.dist < prev.dist) {
+                                map.set(key, {
+                                    company: stop.company,
+                                    route,
+                                    stopId: stop.stopId,
+                                    stopName: stop.stopName,
+                                    lat: stop.lat,
+                                    lng: stop.lng,
+                                    dist: stop.dist
+                                });
+                            }
+                        }
+                    }
+                    return [...map.values()].sort((a, b) => a.dist - b.dist).slice(0, cap);
+                }
+                _stopNearMtr(stop, maxM) {
+                    if (!stop) return null;
+                    const hit = MTRIndex.nearest(stop.lat, stop.lng, maxM || CONFIG.UI.transferLinkWalkM || 400);
+                    if (!hit) return null;
+                    return Object.assign({ stop }, hit);
+                }
+                async _findTransfers(origin, dest, signal) {
+                    if (!origin || !dest) return [];
+                    const results = [];
+                    const originMtr = MTRIndex.nearest(origin.lat, origin.lng, CONFIG.UI.mtrWalkM || 800);
+                    const destMtr = MTRIndex.nearest(dest.lat, dest.lng, CONFIG.UI.mtrWalkM || 800);
+                    const destCap = CONFIG.UI.transferMaxDestRoutes || 10;
+                    const originCap = CONFIG.UI.transferMaxOriginRoutes || 10;
+                    const linkM = CONFIG.UI.transferLinkWalkM || 400;
+                    const xferM = CONFIG.UI.transferWalkM || 250;
+
+                    const destRoutes = this._topNearbyRoutes(dest.lat, dest.lng, destCap);
+                    const originRoutes = this._topNearbyRoutes(origin.lat, origin.lng, originCap);
+
+                    // 巴士 → 地鐵，或地鐵 → 巴士，或巴士 → 地鐵 → 巴士
+                    const needDestLists = destRoutes.length && !destMtr;
+                    const needOriginLists = originRoutes.length && !originMtr;
+                    const destLists = needDestLists || destRoutes.length ? await this._stopListsForRoutes(destRoutes, signal) : [];
+                    if (signal && signal.aborted) return results;
+                    const originLists = needOriginLists ? await this._stopListsForRoutes(originRoutes, signal) : [];
+                    if (signal && signal.aborted) return results;
+
+                    if (originMtr && !destMtr) {
+                        for (const pack of destLists) {
+                            for (const list of this._groupRouteDirs(pack.stops).values()) {
+                                const alight = this._closestStopOnRoute(list, dest.lat, dest.lng, CONFIG.UI.nearbyRadiusM);
+                                if (!alight) continue;
+                                let bestLink = null;
+                                for (const s of list) {
+                                    if (!(s.seq < alight.seq)) continue;
+                                    const near = this._stopNearMtr(s, linkM);
+                                    if (!near) continue;
+                                    if (near.code === originMtr.code) continue;
+                                    if (!bestLink || near.dist < bestLink.dist) bestLink = Object.assign({ board: s }, near);
+                                }
+                                if (!bestLink) continue;
+                                const rail = MTRIndex.path(originMtr.code, bestLink.code);
+                                if (!rail) continue;
+                                const busMins = this._rideMinsAlong(list, bestLink.board, alight);
+                                const walk1 = NearbyIndex.walkMins(originMtr.dist) || 0;
+                                const walk2 = NearbyIndex.walkMins(bestLink.dist) || 0;
+                                const walk3 = NearbyIndex.walkMins(Utils.calcDistance(alight.lat, alight.lng, dest.lat, dest.lng)) || 0;
+                                const towards = bestLink.board.variantDest || alight.variantDest || '';
+                                results.push({
+                                    kind: 'transfer',
+                                    company: pack.company,
+                                    route: pack.route,
+                                    routeLabel: `地鐵+${pack.route}`,
+                                    stopId: bestLink.board.stopId,
+                                    stopName: bestLink.board.stopName,
+                                    lat: bestLink.board.lat,
+                                    lng: bestLink.board.lng,
+                                    direction: bestLink.board.direction,
+                                    destStopId: alight.stopId,
+                                    destStopName: alight.stopName,
+                                    rideMins: (rail.mins || 0) + (busMins || 0),
+                                    totalWalkMins: walk1 + walk2 + walk3,
+                                    dist: originMtr.dist,
+                                    variantDest: towards,
+                                    summary: `步行至${originMtr.name}站，地鐵往${bestLink.name}，轉${this._companyLabel(pack.company)}${pack.route}往${towards || alight.stopName}，落${StopPlates.label(alight.stopName, alight.stopId)}`
+                                });
+                            }
+                        }
+                    } else if (!originMtr && destMtr) {
+                        for (const pack of originLists) {
+                            for (const list of this._groupRouteDirs(pack.stops).values()) {
+                                const board = this._closestStopOnRoute(list, origin.lat, origin.lng, CONFIG.UI.nearbyRadiusM);
+                                if (!board) continue;
+                                let bestLink = null;
+                                for (const s of list) {
+                                    if (!(board.seq < s.seq)) continue;
+                                    const near = this._stopNearMtr(s, linkM);
+                                    if (!near) continue;
+                                    if (near.code === destMtr.code) continue;
+                                    if (!bestLink || near.dist < bestLink.dist) bestLink = Object.assign({ alight: s }, near);
+                                }
+                                if (!bestLink) continue;
+                                const rail = MTRIndex.path(bestLink.code, destMtr.code);
+                                if (!rail) continue;
+                                const busMins = this._rideMinsAlong(list, board, bestLink.alight);
+                                const walk1 = NearbyIndex.walkMins(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)) || 0;
+                                const walk2 = NearbyIndex.walkMins(bestLink.dist) || 0;
+                                const walk3 = NearbyIndex.walkMins(destMtr.dist) || 0;
+                                const towards = board.variantDest || '';
+                                results.push({
+                                    kind: 'transfer',
+                                    company: pack.company,
+                                    route: pack.route,
+                                    routeLabel: `${pack.route}+地鐵`,
+                                    stopId: board.stopId,
+                                    stopName: board.stopName,
+                                    lat: board.lat,
+                                    lng: board.lng,
+                                    direction: board.direction,
+                                    destStopId: bestLink.alight.stopId,
+                                    destStopName: bestLink.alight.stopName,
+                                    rideMins: (busMins || 0) + (rail.mins || 0),
+                                    totalWalkMins: walk1 + walk2 + walk3,
+                                    dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)),
+                                    variantDest: towards,
+                                    summary: `步行至${StopPlates.label(board.stopName, board.stopId)}上${this._companyLabel(pack.company)}${pack.route}${towards ? '（往' + towards + '）' : ''}，轉${bestLink.name}站地鐵往${destMtr.name}`
+                                });
+                            }
+                        }
+                    }
+
+                    // 已有地鐵轉巴士或巴士轉地鐵就唔再搵巴士互轉，避免加重手機負擔
+                    if (results.length) return this._dedupeTransfers(results);
+
+                    // 巴士轉巴士（一轉）；仍冇結果先至做最多兩轉
+                    const originPacks = originLists.length ? originLists : await this._stopListsForRoutes(originRoutes, signal);
+                    if (signal && signal.aborted) return this._dedupeTransfers(results);
+                    const destPacks = destLists.length ? destLists : await this._stopListsForRoutes(destRoutes, signal);
+                    if (signal && signal.aborted) return this._dedupeTransfers(results);
+
+                    const one = this._busBusOneTransfer(origin, dest, originPacks, destPacks, xferM);
+                    results.push(...one);
+                    if (!one.length) {
+                        const mid = await this._busBusTwoTransfers(origin, dest, originPacks, destPacks, xferM, signal);
+                        results.push(...mid);
+                    }
+                    return this._dedupeTransfers(results);
+                }
+                _dedupeTransfers(rows) {
+                    const seen = new Set();
+                    const out = [];
+                    for (const r of (rows || []).sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || (a.totalWalkMins || 0) - (b.totalWalkMins || 0))) {
+                        const key = `${r.kind}|${r.company}|${r.route}|${r.summary}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        out.push(r);
+                    }
+                    return out.slice(0, 12);
+                }
+                _busBusOneTransfer(origin, dest, originPacks, destPacks, xferM) {
+                    const out = [];
+                    for (const a of originPacks) {
+                        for (const listA of this._groupRouteDirs(a.stops).values()) {
+                            const board = this._closestStopOnRoute(listA, origin.lat, origin.lng, CONFIG.UI.nearbyRadiusM);
+                            if (!board) continue;
+                            const later = listA.filter(s => s.seq > board.seq);
+                            if (!later.length) continue;
+                            for (const b of destPacks) {
+                                if (a.company === b.company && a.route === b.route) continue;
+                                for (const listB of this._groupRouteDirs(b.stops).values()) {
+                                    const alight = this._closestStopOnRoute(listB, dest.lat, dest.lng, CONFIG.UI.nearbyRadiusM);
+                                    if (!alight) continue;
+                                    const earlier = listB.filter(s => s.seq < alight.seq);
+                                    if (!earlier.length) continue;
+                                    let best = null;
+                                    for (const sA of later) {
+                                        for (const sB of earlier) {
+                                            const d = String(sA.stopId) === String(sB.stopId) ? 0 : Utils.calcDistance(sA.lat, sA.lng, sB.lat, sB.lng);
+                                            if (!isFinite(d) || d > xferM) continue;
+                                            if (!best || d < best.d) best = { sA, sB, d };
+                                        }
+                                    }
+                                    if (!best) continue;
+                                    const ride = (this._rideMinsAlong(listA, board, best.sA) || 0) + (this._rideMinsAlong(listB, best.sB, alight) || 0);
+                                    const walk1 = NearbyIndex.walkMins(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)) || 0;
+                                    const walk2 = NearbyIndex.walkMins(best.d) || 0;
+                                    const walk3 = NearbyIndex.walkMins(Utils.calcDistance(alight.lat, alight.lng, dest.lat, dest.lng)) || 0;
+                                    const tA = board.variantDest || '';
+                                    const tB = best.sB.variantDest || alight.variantDest || '';
+                                    out.push({
+                                        kind: 'transfer',
+                                        company: a.company,
+                                        route: a.route,
+                                        routeLabel: `${a.route}轉${b.route}`,
+                                        stopId: board.stopId,
+                                        stopName: board.stopName,
+                                        lat: board.lat,
+                                        lng: board.lng,
+                                        direction: board.direction,
+                                        destStopId: alight.stopId,
+                                        destStopName: alight.stopName,
+                                        rideMins: ride,
+                                        totalWalkMins: walk1 + walk2 + walk3,
+                                        dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)),
+                                        variantDest: tA,
+                                        summary: `上${this._companyLabel(a.company)}${a.route}${tA ? '（往' + tA + '）' : ''}至${StopPlates.label(best.sA.stopName, best.sA.stopId)}，轉${this._companyLabel(b.company)}${b.route}${tB ? '（往' + tB + '）' : ''}，落${StopPlates.label(alight.stopName, alight.stopId)}`
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    out.sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || a.dist - b.dist);
+                    return out.slice(0, 6);
+                }
+                async _busBusTwoTransfers(origin, dest, originPacks, destPacks, xferM, signal) {
+                    const midCap = CONFIG.UI.transferMaxMidRoutes || 8;
+                    const midMap = new Map();
+                    const addMid = (routeRow, nearA, nearB, dA, dB) => {
+                        const key = this._routeKey(routeRow.company, routeRow.route);
+                        if (String(nearA.stopId) === String(nearB.stopId)) return;
+                        if (Utils.calcDistance(nearA.lat, nearA.lng, nearB.lat, nearB.lng) < 400) return;
+                        const score = (dA || 0) + (dB || 0);
+                        const prev = midMap.get(key);
+                        if (!prev || score < prev.score) midMap.set(key, { company: routeRow.company, route: routeRow.route, nearA, nearB, score });
+                    };
+                    const originLater = [];
+                    for (const pack of originPacks) {
+                        for (const list of this._groupRouteDirs(pack.stops).values()) {
+                            const board = this._closestStopOnRoute(list, origin.lat, origin.lng, CONFIG.UI.nearbyRadiusM);
+                            if (!board) continue;
+                            for (const s of list) {
+                                if (s.seq > board.seq) originLater.push({ pack, list, board, stop: s });
+                            }
+                        }
+                    }
+                    const destEarlier = [];
+                    for (const pack of destPacks) {
+                        for (const list of this._groupRouteDirs(pack.stops).values()) {
+                            const alight = this._closestStopOnRoute(list, dest.lat, dest.lng, CONFIG.UI.nearbyRadiusM);
+                            if (!alight) continue;
+                            for (const s of list) {
+                                if (s.seq < alight.seq) destEarlier.push({ pack, list, alight, stop: s });
+                            }
+                        }
+                    }
+                    // 用已載入站點目錄喺記憶體搵中間路線，唔好盲目逐條線攞站
+                    const indexStops = NearbyIndex.collectStops ? NearbyIndex.collectStops() : [];
+                    const nearbyOf = (lat, lng) => {
+                        const hits = [];
+                        for (const s of indexStops) {
+                            const d = Utils.calcDistance(lat, lng, s.lat, s.lng);
+                            if (isFinite(d) && d <= xferM) hits.push(Object.assign({ dist: d }, s));
+                        }
+                        return hits;
+                    };
+                    const sampleA = originLater.length > 80 ? originLater.filter((_, i) => i % Math.ceil(originLater.length / 80) === 0) : originLater;
+                    const sampleB = destEarlier.length > 80 ? destEarlier.filter((_, i) => i % Math.ceil(destEarlier.length / 80) === 0) : destEarlier;
+                    const routesAtA = new Map();
+                    for (const row of sampleA) {
+                        for (const ns of nearbyOf(row.stop.lat, row.stop.lng)) {
+                            for (const route of ns.routes || []) {
+                                const key = this._routeKey(ns.company, route);
+                                if (key === this._routeKey(row.pack.company, row.pack.route)) continue;
+                                const arr = routesAtA.get(key) || [];
+                                arr.push({ row, midStop: ns, d: ns.dist });
+                                routesAtA.set(key, arr);
+                            }
+                        }
+                    }
+                    for (const row of sampleB) {
+                        for (const ns of nearbyOf(row.stop.lat, row.stop.lng)) {
+                            for (const route of ns.routes || []) {
+                                const key = this._routeKey(ns.company, route);
+                                const aHits = routesAtA.get(key);
+                                if (!aHits) continue;
+                                if (key === this._routeKey(row.pack.company, row.pack.route)) continue;
+                                for (const a of aHits) {
+                                    addMid({ company: ns.company, route }, a.midStop, ns, a.d, ns.dist);
+                                }
+                            }
+                        }
+                    }
+                    const midRows = [...midMap.values()].sort((a, b) => a.score - b.score).slice(0, midCap);
+                    if (!midRows.length) return [];
+                    const midPacks = await this._stopListsForRoutes(midRows, signal);
+                    if (signal && signal.aborted) return [];
+                    const out = [];
+                    for (const mid of midPacks) {
+                        const meta = midMap.get(this._routeKey(mid.company, mid.route));
+                        if (!meta) continue;
+                        for (const listM of this._groupRouteDirs(mid.stops).values()) {
+                            const midBoard = this._closestStopOnRoute(listM, meta.nearA.lat, meta.nearA.lng, xferM + 50);
+                            const midAlight = this._closestStopOnRoute(listM, meta.nearB.lat, meta.nearB.lng, xferM + 50);
+                            if (!midBoard || !midAlight || !(midBoard.seq < midAlight.seq)) continue;
+                            // 配返第一程同第三程
+                            let first = null, last = null;
+                            for (const row of originLater) {
+                                const d = Utils.calcDistance(row.stop.lat, row.stop.lng, midBoard.lat, midBoard.lng);
+                                if (!isFinite(d) || d > xferM) continue;
+                                if (row.stop.seq <= row.board.seq) continue;
+                                if (!first || d < first.d) first = { row, d };
+                            }
+                            for (const row of destEarlier) {
+                                const d = Utils.calcDistance(row.stop.lat, row.stop.lng, midAlight.lat, midAlight.lng);
+                                if (!isFinite(d) || d > xferM) continue;
+                                if (row.stop.seq >= row.alight.seq) continue;
+                                if (!last || d < last.d) last = { row, d };
+                            }
+                            if (!first || !last) continue;
+                            const r1 = this._rideMinsAlong(first.row.list, first.row.board, first.row.stop) || 0;
+                            const r2 = this._rideMinsAlong(listM, midBoard, midAlight) || 0;
+                            const r3 = this._rideMinsAlong(last.row.list, last.row.stop, last.row.alight) || 0;
+                            const walk = (NearbyIndex.walkMins(Utils.calcDistance(origin.lat, origin.lng, first.row.board.lat, first.row.board.lng)) || 0)
+                                + (NearbyIndex.walkMins(first.d) || 0)
+                                + (NearbyIndex.walkMins(last.d) || 0)
+                                + (NearbyIndex.walkMins(Utils.calcDistance(last.row.alight.lat, last.row.alight.lng, dest.lat, dest.lng)) || 0);
+                            const t1 = first.row.board.variantDest || '';
+                            out.push({
+                                kind: 'transfer',
+                                company: first.row.pack.company,
+                                route: first.row.pack.route,
+                                routeLabel: `${first.row.pack.route}轉${mid.route}轉${last.row.pack.route}`,
+                                stopId: first.row.board.stopId,
+                                stopName: first.row.board.stopName,
+                                lat: first.row.board.lat,
+                                lng: first.row.board.lng,
+                                direction: first.row.board.direction,
+                                destStopId: last.row.alight.stopId,
+                                destStopName: last.row.alight.stopName,
+                                rideMins: r1 + r2 + r3,
+                                totalWalkMins: walk,
+                                dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, first.row.board.lat, first.row.board.lng)),
+                                variantDest: t1,
+                                summary: `上${this._companyLabel(first.row.pack.company)}${first.row.pack.route}，轉${this._companyLabel(mid.company)}${mid.route}，再轉${this._companyLabel(last.row.pack.company)}${last.row.pack.route}，落${StopPlates.label(last.row.alight.stopName, last.row.alight.stopId)}`
+                            });
+                        }
+                    }
+                    out.sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || a.dist - b.dist);
+                    return out.slice(0, 4);
+                }
+                                _closestStopOnRoute(stops, lat, lng, maxM) {
                     let best = null;
                     let bestDist = Infinity;
                     let bestBoard = null;
@@ -3172,10 +3789,22 @@
                             rideMins: this._rideMinsAlong(list, board, alight)
                         });
                         if (!best) { best = cand; continue; }
-                        const betterBoard = (boardDist || Infinity) < (best.dist || Infinity);
-                        const betterAlight = !betterBoard && (cand.destDist || Infinity) < (best.destDist || Infinity);
-                        const betterSpan = !betterBoard && !betterAlight && (alight.seq - board.seq) < (best.destSeq - best.seq);
-                        if (betterBoard || betterAlight || betterSpan) best = cand;
+                        const boardDelta = (boardDist || Infinity) - (best.dist || Infinity);
+                        const closerAlight = (cand.destDist || Infinity) < (best.destDist || Infinity);
+                        const destHint = String(item.destLabel || item.destStopName || '');
+                        const nameScore = (row) => {
+                            const n = String(row.destStopName || '');
+                            if (!destHint || !n) return 0;
+                            if (destHint.includes(n) || n.includes(destHint.replace(/^港鐵/, '').replace(/站$/, ''))) return 1;
+                            return 0;
+                        };
+                        const betterName = nameScore(cand) > nameScore(best);
+                        const betterBoard = boardDelta < -80;
+                        const similarBoard = Math.abs(boardDelta) <= 80;
+                        const betterAlight = (similarBoard || !betterBoard) && closerAlight && !betterBoard;
+                        const betterSpan = !betterBoard && !closerAlight && (alight.seq - board.seq) < (best.destSeq - best.seq);
+                        if (betterName && (similarBoard || closerAlight)) best = cand;
+                        else if (betterBoard || betterAlight || betterSpan) best = cand;
                     }
                     return best || { invalid: true };
                 }
@@ -3183,14 +3812,14 @@
                     const cap = (items || []).slice(0, 20);
                     const tasks = cap.map(item => async () => {
                         try {
-                            return await this._confirmJourney(item, signal);
+                            return await this._confirmJourney(Object.assign({}, item, { destLabel }), signal);
                         } catch (e) {
                             if (e && e.name === 'AbortError') throw e;
                             return item;
                         }
                     });
                     const raw = await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
-                    if (signal && signal.aborted) return;
+                    if (signal && signal.aborted) return [];
                     const confirmed = [];
                     for (let i = 0; i < raw.length; i++) {
                         const row = raw[i];
@@ -3202,15 +3831,22 @@
                         confirmed.push(row);
                     }
                     confirmed.sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    if (extra && extra.render === false) return confirmed;
                     this._renderExploreResults(Object.assign({}, extra || {}, { journeys: confirmed, destLabel }));
                     this._setNearbyHint(confirmed.length
                         ? `已定位目的地「${destLabel}」，附近行得到、可以去到嘅路線有 ${confirmed.length} 條，已按步行距離排序。撳線即可加入上車那站。`
                         : `已定位目的地「${destLabel}」，核對方向後暫時搵唔到直達路線。`,
                         confirmed.length ? 'ok' : 'error');
+                    return confirmed;
                 }
                 async _addNearbyChip(chip) {
 
                     if (!chip || chip.disabled) return;
+                    const kind = chip.dataset.kind || '';
+                    if (kind === 'mtr' || (kind === 'transfer' && (chip.dataset.company === 'MTR' || !chip.dataset.route || chip.dataset.route === '地鐵'))) {
+                        this.showToast(chip.dataset.summary || '呢程係地鐵／轉乘，請按提示行');
+                        return;
+                    }
                     const company = chip.dataset.company;
                     const route = chip.dataset.route;
                     const stopId = chip.dataset.stopId;
