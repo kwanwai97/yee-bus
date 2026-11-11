@@ -143,24 +143,6 @@
         .route-hit .route-hit-no { font-weight: 800; font-size: 1.05rem; color: #1a1a2e; min-width: 48px; }
         .route-hit .route-hit-meta { flex: 1; min-width: 0; font-size: 0.78rem; color: #495057; line-height: 1.25; }
         .nearby-results { max-height: 52vh; }
-        .sched-bar { margin: 0 0 10px; padding: 8px 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 12px; }
-        .sched-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
-        .sched-row:first-child { margin-top: 0; }
-        .sched-label { font-size: 0.72rem; font-weight: 700; color: #495057; white-space: nowrap; }
-        .sched-presets, .sched-days { display: flex; flex-wrap: wrap; gap: 4px; }
-        .sched-chip { border: 1px solid #dee2e6; background: #fff; color: #495057; border-radius: 14px; padding: 3px 8px; font-size: 0.72rem; font-weight: 600; cursor: pointer; line-height: 1.3; }
-        .sched-chip.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
-        .sched-times { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #495057; }
-        .sched-times input[type="time"] { border: 1px solid #ced4da; border-radius: 8px; padding: 2px 4px; font-size: 0.78rem; }
-        .sched-times[hidden] { display: none !important; }
-        .sched-note { margin-top: 6px; font-size: 0.68rem; color: #868e96; line-height: 1.35; }
-        .sched-detail { margin-top: 8px; padding: 8px 10px; background: #fff; border: 1px solid #e9ecef; border-radius: 10px; }
-        .sched-detail[hidden] { display: none !important; }
-        .sched-detail-title { font-size: 0.75rem; font-weight: 700; color: #495057; margin-bottom: 6px; }
-        .sched-dir { font-size: 0.7rem; font-weight: 700; color: #868e96; margin: 6px 0 4px; }
-        .sched-times-list { display: flex; flex-wrap: wrap; gap: 4px; }
-        .sched-pill { display: inline-block; background: #f1f3f5; border-radius: 8px; padding: 2px 7px; font-size: 0.72rem; color: #212529; }
-        .sched-empty, .sched-loading, .sched-foot { font-size: 0.68rem; color: #868e96; margin-top: 6px; line-height: 1.35; }
     </style>
 </head>
 <body>
@@ -176,32 +158,6 @@
             <div class="search-tabs" role="tablist" aria-label="搜尋方式">
                 <button type="button" class="search-tab active" id="tabRouteBtn" data-tab="route" role="tab" aria-selected="true" aria-controls="tabRoute">路線</button>
                 <button type="button" class="search-tab" id="tabExploreBtn" data-tab="explore" role="tab" aria-selected="false" aria-controls="tabExplore">附近同搜尋</button>
-            </div>
-            <div class="sched-bar" id="schedBar">
-                <div class="sched-row">
-                    <span class="sched-label">章程時間</span>
-                    <div class="sched-presets" role="group" aria-label="班次時段">
-                        <button type="button" class="sched-chip active" data-sched-preset="all">唔收窄</button>
-                        <button type="button" class="sched-chip" data-sched-preset="now">而家起</button>
-                        <button type="button" class="sched-chip" data-sched-preset="morning">朝早</button>
-                        <button type="button" class="sched-chip" data-sched-preset="mid">午間</button>
-                        <button type="button" class="sched-chip" data-sched-preset="evening">黃昏</button>
-                        <button type="button" class="sched-chip" data-sched-preset="night">晚間</button>
-                        <button type="button" class="sched-chip" data-sched-preset="custom">自訂</button>
-                    </div>
-                </div>
-                <div class="sched-row">
-                    <div class="sched-days" role="group" aria-label="日期類型">
-                        <button type="button" class="sched-chip" data-sched-day="MF">平日</button>
-                        <button type="button" class="sched-chip" data-sched-day="S">星期六</button>
-                        <button type="button" class="sched-chip" data-sched-day="H">日及假期</button>
-                    </div>
-                    <div class="sched-times" id="schedTimes" hidden>
-                        <label>由 <input type="time" id="schedFrom" value="07:00"></label>
-                        <label>至 <input type="time" id="schedTo" value="09:00"></label>
-                    </div>
-                </div>
-                <div class="sched-note" id="schedNote">預設睇全日，唔會拖慢搜尋。揀時段之後，只顯示嗰段有車嘅九巴／龍運班次（總站開出時間）。城巴／嶼巴官方未有同等章程接口，仍會列出，唔會用其他公司同號線去估。</div>
             </div>
             <div id="tabRoute" class="tab-panel" data-panel="route" role="tabpanel" aria-labelledby="tabRouteBtn">
                 <div class="input-row">
@@ -219,7 +175,6 @@
                 <select id="stationSelect" class="station-select-box">
                     <option value="">-- 請輸入路線搜尋 --</option>
                 </select>
-                <div class="sched-detail" id="schedDetail" hidden></div>
                 <div class="add-row">
                     <button id="addBtn" class="btn btn-add" disabled>➕ 加入關注</button>
                     <button id="quickAddBtn" class="btn btn-quick" disabled>📍 最近站</button>
@@ -273,9 +228,7 @@
                     NLB: 'https://rt.data.gov.hk/v2/transport/nlb',
                     KMB_STOP_PLATES: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/kmb/stops/allstops.json',
                     // 城巴官方冇一次過全站接口；用公開站點清單避免逐站打 /stop/{id}
-                    CTB_STOPS: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/ctb/stops/allstops.json',
-                    // 九巴／龍運官方章程（總站開出時間），瀏覽器可直接讀，有 CORS
-                    KMB_SCHEDULE: 'https://search.kmb.hk/KMBWebSite/Function/FunctionRequest.ashx'
+                    CTB_STOPS: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/ctb/stops/allstops.json'
                 },
                 GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
                 UI: {
@@ -979,146 +932,6 @@
                     }
                     hits.sort((a, b) => a._rank - b._rank || a.route.localeCompare(b.route, 'en', { numeric: true }) || a.company.localeCompare(b.company));
                     return hits.slice(0, cap);
-                }
-            };
-
-            const ScheduleIndex = {
-                _mem: Object.create(null),
-                dayLabel(day) {
-                    return day === 'S' ? '星期六' : day === 'H' ? '星期日及公眾假期' : '平日（星期一至五）';
-                },
-                todayDayType(d) {
-                    const day = (d || new Date()).getDay();
-                    if (day === 0) return 'H';
-                    if (day === 6) return 'S';
-                    return 'MF';
-                },
-                parseHM(text) {
-                    const m = String(text || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-                    if (!m) return null;
-                    const h = Number(m[1]);
-                    const min = Number(m[2]);
-                    if (h === 24 && min === 0) return 24 * 60;
-                    if (h > 24 || min > 59) return null;
-                    return h * 60 + min;
-                },
-                formatHM(mins) {
-                    if (!isFinite(mins)) return '';
-                    let n = ((mins % (24 * 60)) + (24 * 60)) % (24 * 60);
-                    if (mins >= 24 * 60 && n === 0) return '24:00';
-                    const h = Math.floor(n / 60);
-                    const m = n % 60;
-                    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-                },
-                parseRangeOrPoint(text) {
-                    const s = String(text || '').trim();
-                    if (!s) return null;
-                    const range = s.match(/^(\d{1,2}:\d{2})\s*[-–—至]\s*(\d{1,2}:\d{2})$/);
-                    if (range) {
-                        const a = this.parseHM(range[1]);
-                        let b = this.parseHM(range[2]);
-                        if (a == null || b == null) return null;
-                        if (b === 0) b = 24 * 60;
-                        return { start: a, end: b, point: false, text: `${range[1]}–${range[2]}` };
-                    }
-                    const p = this.parseHM(s);
-                    if (p == null) return { start: null, end: null, point: false, remark: s, text: s };
-                    return { start: p, end: p, point: true, text: s };
-                },
-                overlaps(start, end, fromMin, toMin) {
-                    if (start == null || end == null || fromMin == null || toMin == null) return false;
-                    const periods = [];
-                    if (end < start) periods.push([start, end + 24 * 60]);
-                    else periods.push([start, end]);
-                    const windows = [];
-                    if (toMin <= fromMin) windows.push([fromMin, toMin + 24 * 60]);
-                    else windows.push([fromMin, toMin]);
-                    for (const [a, b] of periods) {
-                        for (const [c, d] of windows) {
-                            for (const shift of [-1440, 0, 1440]) {
-                                if (a + shift <= d && b + shift >= c) return true;
-                            }
-                        }
-                    }
-                    return false;
-                },
-                formatHeadway(h) {
-                    const t = String(h || '').replace(/\s+/g, '');
-                    if (!t) return '';
-                    const m = t.match(/^(\d+)(?:-(\d+))?$/);
-                    if (!m) return '';
-                    return m[2] ? `每${m[1]}–${m[2]}分鐘` : `每${m[1]}分鐘`;
-                },
-                formatSeg(s) {
-                    const hw = this.formatHeadway(s && s.headway);
-                    const text = (s && s.text) || '';
-                    if (s && s.remark && s.start == null) return s.remark;
-                    return hw ? `${text}，${hw}` : text;
-                },
-                _parse(route, json) {
-                    const segs = [];
-                    const data = (json && json.data) || {};
-                    for (const [stKey, rows] of Object.entries(data)) {
-                        const st = parseInt(stKey, 10) || 1;
-                        for (const row of rows || []) {
-                            const day = String(row.DayType || '').trim() || 'D';
-                            const remark = String(row.ServiceType_Chi || '').trim();
-                            const orig = String(row.Origin_Chi || '').trim();
-                            const dest = String(row.Destination_Chi || '').trim();
-                            const pairs = [
-                                { direction: 'outbound', text: row.BoundText1, head: row.BoundTime1 },
-                                { direction: 'inbound', text: row.BoundText2, head: row.BoundTime2 }
-                            ];
-                            for (const bound of pairs) {
-                                const parsed = this.parseRangeOrPoint(bound.text);
-                                if (!parsed) continue;
-                                segs.push({
-                                    route,
-                                    serviceType: st,
-                                    dayType: day,
-                                    direction: bound.direction,
-                                    start: parsed.start,
-                                    end: parsed.end,
-                                    point: !!parsed.point,
-                                    remark: parsed.remark || remark,
-                                    text: parsed.text,
-                                    headway: String(bound.head || '').trim(),
-                                    orig,
-                                    dest
-                                });
-                            }
-                        }
-                    }
-                    return segs;
-                },
-                async loadKMB(route, signal) {
-                    const key = String(route || '').trim().toUpperCase();
-                    if (!key) return [];
-                    const hit = this._mem[key];
-                    if (hit && hit.exp > Date.now()) return hit.data;
-                    const url = `${CONFIG.API.KMB_SCHEDULE}?action=getschedule&route=${encodeURIComponent(key)}&bound=1`;
-                    const json = await Fetcher.fetchJSON(url, { signal, timeoutMs: 10000 });
-                    const data = this._parse(key, json);
-                    this._mem[key] = { exp: Date.now() + CONFIG.CACHE.routeTTL, data };
-                    return data;
-                },
-                matches(segs, { dayType, fromMin, toMin, direction } = {}) {
-                    const days = new Set([dayType || this.todayDayType(), 'D']);
-                    return (segs || []).filter(s => {
-                        if (!days.has(s.dayType)) return false;
-                        if (direction && s.direction !== direction) return false;
-                        if (s.start == null) return false;
-                        if (fromMin == null || toMin == null) return true;
-                        return this.overlaps(s.start, s.end, fromMin, toMin);
-                    });
-                },
-                summarize(hits, limit) {
-                    const cap = limit || 3;
-                    const list = (hits || []).filter(s => s && s.text && s.start != null);
-                    if (!list.length) return '';
-                    const parts = list.slice(0, cap).map(s => this.formatSeg(s));
-                    const more = list.length > cap ? ` 等${list.length}段` : '';
-                    return `章程 ${parts.join('、')}${more}`;
                 }
             };
 
@@ -2121,13 +1934,7 @@
                         placeVoiceBtn: document.getElementById('placeVoiceBtn'),
                         voiceBar: document.getElementById('voiceBar'),
                         voiceBarText: document.getElementById('voiceBarText'),
-                        voiceCancelBtn: document.getElementById('voiceCancelBtn'),
-                        schedBar: document.getElementById('schedBar'),
-                        schedTimes: document.getElementById('schedTimes'),
-                        schedFrom: document.getElementById('schedFrom'),
-                        schedTo: document.getElementById('schedTo'),
-                        schedNote: document.getElementById('schedNote'),
-                        schedDetail: document.getElementById('schedDetail')
+                        voiceCancelBtn: document.getElementById('voiceCancelBtn')
                     };
                     this.gps = new GPSManager();
                     this.watchList = new WatchList();
@@ -2140,12 +1947,7 @@
                     this._searchAbort = null;
                     this._nearbyAbort = null;
                     this._nearbyOrigin = null;
-                    this._lastExplorePayload = null;
-                    this._schedPaintGen = 0;
-                    this._schedRouteGen = 0;
-                    this._sched = { preset: 'all', dayType: ScheduleIndex.todayDayType(), from: '07:00', to: '09:00' };
                     this._bindEvents();
-                    this._syncSchedUi();
                     // 启动 GPS（自动检查权限，不弹窗）
                     this.gps.start((text, ok) => {
                         this.elements.gpsStatus.textContent = text;
@@ -2200,7 +2002,6 @@
                     });
                     this.elements.expandOut.addEventListener('click', () => this._expandDirection('outbound'));
                     this.elements.expandIn.addEventListener('click', () => this._expandDirection('inbound'));
-                    this._bindScheduleBar();
                     this.elements.addBtn.addEventListener('click', () => this._addToWatchList());
                     this.elements.quickAddBtn.addEventListener('click', () => this._quickAddNearest());
                     this.elements.locateBtn.addEventListener('click', () => this._handleLocate());
@@ -2346,7 +2147,7 @@
                         return;
                     }
                     const route = raw.toUpperCase();
-                    if (!route) { this._gpsSuspended = false; this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); this._refreshRouteSchedule(); return; }
+                    if (!route) { this._gpsSuspended = false; this.elements.stationSelect.innerHTML = '<option value="">-- 請輸入路線 --</option>'; this._updateAddButton(); this._updateQuickButtonState(); return; }
                     this._gpsSuspended = true;
                     this.elements.stationSelect.innerHTML = '<option value="">⏳ 搜尋中...</option>';
                     this._searchStations(route);
@@ -2383,7 +2184,6 @@
                         if (gen !== this._searchGen) return;
                         this.currentStops = stops;
                         this._populateStationSelect(stops, null);
-                        this._refreshRouteSchedule();
                     } catch (e) {
                         if (gen !== this._searchGen || (e && e.name === 'AbortError')) return;
                         console.error('搜尋失敗:', e);
@@ -2873,7 +2673,6 @@
                     } else {
                         meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
                     }
-                    if (r.schedText) meta = `${meta} · ${r.schedText}`;
                     const routeId = r.routeId || '';
                     const dir = r.direction || '';
                     const destId = r.destStopId || '';
@@ -2902,7 +2701,6 @@
                         : (isJourney
                             ? `由而家去${Utils.escapeHtml(where)} · 已按附近步行距離排序，撳線即可加入上車那站`
                             : `附近路線${originLabel ? '（' + Utils.escapeHtml(originLabel) + '）' : ''} · 撳線即可加入關注`);
-                    if (this._schedWindow().active) title += ' · 已按章程時間收窄';
                     sec.innerHTML = `<div class="result-title">${title}</div>` + routes.map(r => this._nearbyRouteButtonHtml(r)).join('');
                     return sec;
                 }
@@ -3041,230 +2839,7 @@
                 async _searchNearbyByAddress() {
                     return this._searchExplore();
                 }
-                _bindScheduleBar() {
-                    const bar = this.elements.schedBar;
-                    if (!bar) return;
-                    bar.addEventListener('click', (e) => {
-                        const presetBtn = e.target.closest('[data-sched-preset]');
-                        if (presetBtn) {
-                            this._sched.preset = presetBtn.getAttribute('data-sched-preset') || 'all';
-                            this._syncSchedUi();
-                            this._onScheduleChange();
-                            return;
-                        }
-                        const dayBtn = e.target.closest('[data-sched-day]');
-                        if (dayBtn) {
-                            this._sched.dayType = dayBtn.getAttribute('data-sched-day') || 'MF';
-                            this._syncSchedUi();
-                            this._onScheduleChange();
-                        }
-                    });
-                    const onTime = () => {
-                        this._sched.preset = 'custom';
-                        this._sched.from = this.elements.schedFrom.value || '07:00';
-                        this._sched.to = this.elements.schedTo.value || '09:00';
-                        this._syncSchedUi();
-                        this._onScheduleChange();
-                    };
-                    this.elements.schedFrom.addEventListener('change', onTime);
-                    this.elements.schedTo.addEventListener('change', onTime);
-                }
-                _syncSchedUi() {
-                    const s = this._sched;
-                    document.querySelectorAll('[data-sched-preset]').forEach(btn => {
-                        btn.classList.toggle('active', btn.getAttribute('data-sched-preset') === s.preset);
-                    });
-                    document.querySelectorAll('[data-sched-day]').forEach(btn => {
-                        btn.classList.toggle('active', btn.getAttribute('data-sched-day') === s.dayType);
-                    });
-                    const custom = s.preset === 'custom';
-                    this.elements.schedTimes.hidden = !custom;
-                    if (custom) {
-                        this.elements.schedFrom.value = s.from || '07:00';
-                        this.elements.schedTo.value = s.to || '09:00';
-                    }
-                    this._updateSchedNote();
-                }
-                _schedWindow() {
-                    const s = this._sched || { preset: 'all', dayType: 'MF' };
-                    const now = new Date();
-                    const nowMin = now.getHours() * 60 + now.getMinutes();
-                    let fromMin = null;
-                    let toMin = null;
-                    let label = '全日';
-                    if (s.preset === 'now') {
-                        fromMin = nowMin;
-                        toMin = 26 * 60;
-                        label = `而家起（${ScheduleIndex.formatHM(nowMin)} 至深夜）`;
-                    } else if (s.preset === 'morning') {
-                        fromMin = 6 * 60; toMin = 10 * 60; label = '朝早 06:00–10:00';
-                    } else if (s.preset === 'mid') {
-                        fromMin = 10 * 60; toMin = 16 * 60; label = '午間 10:00–16:00';
-                    } else if (s.preset === 'evening') {
-                        fromMin = 16 * 60; toMin = 20 * 60; label = '黃昏 16:00–20:00';
-                    } else if (s.preset === 'night') {
-                        fromMin = 20 * 60; toMin = 26 * 60; label = '晚間 20:00–02:00';
-                    } else if (s.preset === 'custom') {
-                        fromMin = ScheduleIndex.parseHM(s.from || '07:00');
-                        toMin = ScheduleIndex.parseHM(s.to || '09:00');
-                        if (fromMin == null) fromMin = 7 * 60;
-                        if (toMin == null) toMin = 9 * 60;
-                        label = `自訂 ${ScheduleIndex.formatHM(fromMin)}–${ScheduleIndex.formatHM(toMin)}`;
-                    }
-                    return {
-                        active: s.preset !== 'all' && fromMin != null && toMin != null,
-                        fromMin,
-                        toMin,
-                        label,
-                        dayType: s.dayType || ScheduleIndex.todayDayType(),
-                        dayLabel: ScheduleIndex.dayLabel(s.dayType || ScheduleIndex.todayDayType())
-                    };
-                }
-                _updateSchedNote() {
-                    const note = this.elements.schedNote;
-                    if (!note) return;
-                    const win = this._schedWindow();
-                    if (!win.active) {
-                        note.textContent = `而家睇${win.dayLabel}全日章程，未收窄時段，搜尋唔會額外變慢。揀時段之後，只顯示嗰段有車嘅九巴／龍運班次（總站開出時間）。城巴／嶼巴官方未有同等章程接口，仍會列出。`;
-                        return;
-                    }
-                    note.textContent = `已收窄至${win.dayLabel} ${win.label}。九巴／龍運只顯示呢段有開出嘅班次；時間係總站開出，沿途站會稍後到達。城巴／嶼巴若有仍會列出，唔會用其他公司同號線去估。`;
-                }
-                _onScheduleChange() {
-                    this._updateSchedNote();
-                    this._refreshRouteSchedule();
-                    if (this._lastExplorePayload) this._paintExploreScheduled();
-                }
-                _canUseKmbSchedule(row) {
-                    const co = String((row && row.company) || '').toUpperCase();
-                    return co === 'KMB' || co === 'LWB';
-                }
-                async _filterPayloadBySchedule(payload, win) {
-                    const lists = {
-                        journeys: payload.journeys || [],
-                        nearbyRoutes: payload.nearbyRoutes || [],
-                        routes: payload.routes || []
-                    };
-                    const needed = [];
-                    const seen = new Set();
-                    for (const arr of Object.values(lists)) {
-                        for (const r of arr) {
-                            if (!this._canUseKmbSchedule(r)) continue;
-                            const key = String(r.route || '').toUpperCase();
-                            if (!key || seen.has(key)) continue;
-                            seen.add(key);
-                            needed.push(key);
-                        }
-                    }
-                    const map = Object.create(null);
-                    const tasks = needed.map(route => async () => {
-                        try {
-                            map[route] = await ScheduleIndex.loadKMB(route);
-                        } catch (e) {
-                            if (e && e.name === 'AbortError') throw e;
-                            map[route] = null;
-                        }
-                    });
-                    if (tasks.length) await Utils.parallelLimit(tasks, CONFIG.UI.maxConcurrentRequests);
-                    const out = Object.assign({}, payload);
-                    for (const key of Object.keys(lists)) {
-                        out[key] = lists[key].filter(r => this._rowMatchesSchedule(r, map, win)).map(r => {
-                            const text = this._rowScheduleText(r, map, win);
-                            return text ? Object.assign({}, r, { schedText: text }) : r;
-                        });
-                    }
-                    return out;
-                }
-                _rowMatchesSchedule(row, map, win) {
-                    if (!this._canUseKmbSchedule(row)) return true;
-                    const segs = map[String(row.route || '').toUpperCase()];
-                    if (segs == null) return true;
-                    if (!segs.length) return true;
-                    const hits = ScheduleIndex.matches(segs, {
-                        dayType: win.dayType,
-                        fromMin: win.fromMin,
-                        toMin: win.toMin,
-                        direction: row.direction || null
-                    });
-                    return hits.length > 0;
-                }
-                _rowScheduleText(row, map, win) {
-                    if (!this._canUseKmbSchedule(row)) return '';
-                    const segs = map[String(row.route || '').toUpperCase()];
-                    if (!segs || !segs.length) return '';
-                    const hits = ScheduleIndex.matches(segs, {
-                        dayType: win.dayType,
-                        fromMin: win.fromMin,
-                        toMin: win.toMin,
-                        direction: row.direction || null
-                    });
-                    return ScheduleIndex.summarize(hits, 3);
-                }
-                async _refreshRouteSchedule() {
-                    const box = this.elements.schedDetail;
-                    if (!box) return;
-                    const company = this.elements.companySelect.value;
-                    const route = (this.elements.routeInput.value || '').trim().toUpperCase();
-                    const win = this._schedWindow();
-                    if (!route || (company !== 'KMB' && company !== 'LWB')) {
-                        box.hidden = true;
-                        box.innerHTML = '';
-                        return;
-                    }
-                    const gen = ++this._schedRouteGen;
-                    box.hidden = false;
-                    box.innerHTML = '<div class="sched-loading">正在載入章程時間…</div>';
-                    try {
-                        const segs = await ScheduleIndex.loadKMB(route);
-                        if (gen !== this._schedRouteGen) return;
-                        const groups = [
-                            { dir: 'outbound', label: '正向' },
-                            { dir: 'inbound', label: '反向' }
-                        ];
-                        let html = `<div class="sched-detail-title">${Utils.escapeHtml(route)} 章程（總站開出）· ${Utils.escapeHtml(win.dayLabel)}${win.active ? ' · ' + Utils.escapeHtml(win.label) : ''}</div>`;
-                        let any = false;
-                        for (const g of groups) {
-                            const hits = ScheduleIndex.matches(segs, {
-                                dayType: win.dayType,
-                                fromMin: win.active ? win.fromMin : null,
-                                toMin: win.active ? win.toMin : null,
-                                direction: g.dir
-                            });
-                            if (!hits.length) continue;
-                            any = true;
-                            html += `<div class="sched-dir">${g.label}</div><div class="sched-times-list">${hits.map(s => `<span class="sched-pill">${Utils.escapeHtml(ScheduleIndex.formatSeg(s))}</span>`).join('')}</div>`;
-                        }
-                        if (!any) html += `<div class="sched-empty">${win.active ? '呢個時段冇呢條線嘅班次。' : '暫時讀唔到呢日嘅章程。'}</div>`;
-                        html += `<div class="sched-foot">時間係總站開出，沿途站會稍後到達。${win.active ? '' : '揀上面時段可收窄班次。'}</div>`;
-                        box.innerHTML = html;
-                    } catch (e) {
-                        if (e && e.name === 'AbortError') return;
-                        box.hidden = false;
-                        box.innerHTML = `<div class="sched-empty">暫時讀唔到章程：${Utils.escapeHtml(e.message || '請稍後重試')}</div>`;
-                    }
-                }
-                _renderExploreResults(payload) {
-                    this._lastExplorePayload = payload || this._lastExplorePayload;
-                    this._paintExploreScheduled();
-                }
-                async _paintExploreScheduled() {
-                    const payload = this._lastExplorePayload;
-                    if (!payload) return;
-                    const gen = ++this._schedPaintGen;
-                    const win = this._schedWindow();
-                    let next = payload;
-                    if (win.active) {
-                        try {
-                            next = await this._filterPayloadBySchedule(payload, win);
-                        } catch (e) {
-                            if (e && e.name === 'AbortError') return;
-                            next = payload;
-                        }
-                        if (gen !== this._schedPaintGen) return;
-                    }
-                    this._paintExplore(next);
-                }
-                _paintExplore({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib, journeys, destLabel, fromHere }) {
+                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib, journeys, destLabel, fromHere }) {
                     const box = this.elements.nearbyResults;
                     box.hidden = false;
                     box.innerHTML = '';
