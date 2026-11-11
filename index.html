@@ -148,9 +148,11 @@
             const CONFIG = {
                 API: {
                     KMB: 'https://data.etabus.gov.hk/v1/transport/kmb',
-                    CTB: 'https://rt.data.gov.hk/v1/transport/citybus-nwfb',
+                    CTB: 'https://rt.data.gov.hk/v2/transport/citybus',
                     NLB: 'https://rt.data.gov.hk/v2/transport/nlb',
-                    KMB_STOP_PLATES: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/kmb/stops/allstops.json'
+                    KMB_STOP_PLATES: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/kmb/stops/allstops.json',
+                    // 城巴官方冇一次過全站接口；用公開站點清單避免逐站打 /stop/{id}
+                    CTB_STOPS: 'https://winstonma.github.io/MMM-HK-Transport-ETA-Data/ctb/stops/allstops.json'
                 },
                 GPS: { enableHighAccuracy: true, timeout: 12000, maximumAge: 3000 },
                 UI: {
@@ -423,6 +425,45 @@
                 }
             };
 
+
+            // ========== 城巴站點清單（一次過載入，避免搜尋時逐站請求） ==========
+            const CTBStops = {
+                _map: Object.create(null),
+                _ready: null,
+                load() {
+                    if (this._ready) return this._ready;
+                    this._ready = this._load();
+                    return this._ready;
+                },
+                async _load() {
+                    try {
+                        const json = await Fetcher.fetchJSON(CONFIG.API.CTB_STOPS, { timeoutMs: 25000 });
+                        const entries = (json && typeof json === 'object' && !Array.isArray(json))
+                            ? Object.values(json)
+                            : (Array.isArray(json) ? json : []);
+                        const map = Object.create(null);
+                        for (const d of entries) {
+                            if (!d || !d.stop) continue;
+                            map[String(d.stop)] = {
+                                stop: String(d.stop),
+                                name_tc: d.name_tc || '',
+                                name_en: d.name_en || '',
+                                lat: d.lat,
+                                long: d.long
+                            };
+                        }
+                        this._map = map;
+                    } catch (e) {
+                        console.warn('載入城巴站點清單失敗，將回退逐站請求:', e);
+                        this._map = Object.create(null);
+                    }
+                },
+                get(stopId) {
+                    if (!stopId) return null;
+                    return this._map[String(stopId)] || null;
+                }
+            };
+
             // ========== 巴士 API（含修复） ==========
             class BusAPI {
                 static async getStops(company, route, direction = null, signal = null) {
@@ -538,28 +579,46 @@
                 }
 
                 static async _fetchCTBStops(route, direction, signal) {
+                    // 先載入全站清單（約一次／日內），再只打 route-stop；缺漏站先回退單站 API
+                    await CTBStops.load();
                     const dirs = direction ? [direction] : ['outbound', 'inbound'];
-                    let all = [];
-                    for (const dir of dirs) {
+                    const lists = await Promise.all(dirs.map(async (dir) => {
                         const url = `${CONFIG.API.CTB}/route-stop/CTB/${route}/${dir}`;
                         const json = await Fetcher.fetchJSON(url, { signal });
-                        const data = json.data || [];
-                        const stopIds = data.map(item => item.stop);
-                        const details = await Utils.parallelLimit(
-                            stopIds.map(id => () => this._getCTBStopDetail(id, signal)),
-                            5
+                        return { dir, data: json.data || [] };
+                    }));
+                    const missing = [];
+                    const seenMiss = new Set();
+                    for (const { data } of lists) {
+                        for (const item of data) {
+                            const id = item && item.stop;
+                            if (!id) continue;
+                            if (CTBStops.get(id) || stopCache.get(`CTB:stop:${id}`)) continue;
+                            if (seenMiss.has(id)) continue;
+                            seenMiss.add(id);
+                            missing.push(id);
+                        }
+                    }
+                    if (missing.length > 0) {
+                        await Utils.parallelLimit(
+                            missing.map(id => () => this._getCTBStopDetail(id, signal)),
+                            8
                         );
-                        data.forEach((item, i) => {
-                            const stopInfo = details[i] || {};
+                    }
+                    const all = [];
+                    for (const { dir, data } of lists) {
+                        for (const item of data) {
+                            const id = item.stop;
+                            const stopInfo = CTBStops.get(id) || stopCache.get(`CTB:stop:${id}`) || {};
                             all.push({
-                                stopId: item.stop,
+                                stopId: id,
                                 seq: parseInt(item.seq, 10) || 0,
                                 direction: dir,
                                 stopName: stopInfo.name_tc || '城巴車站',
                                 lat: parseFloat(stopInfo.lat) || 0,
                                 lng: parseFloat(stopInfo.long) || 0
                             });
-                        });
+                        }
                     }
                     return all;
                 }
@@ -1053,6 +1112,8 @@
                         if (this.currentStops && this.currentStops.length) this._populateStationSelect(this.currentStops);
                         this.fetchETA();
                     });
+                    // 預載城巴全站清單，令第一次搜尋城巴唔使等逐站請求
+                    CTBStops.load().catch(() => {});
                 }
 
                 _bindEvents() {
