@@ -2669,7 +2669,8 @@
                     if (r.kind === 'journey') {
                         const board = walk ? `上：${name}，${walk}` : `上：${name}`;
                         const towards = r.variantDest ? `（往${r.variantDest}）` : '';
-                        meta = destName ? `${board} → 落：${destName}${towards}` : `${board}${towards}`;
+                        const ride = r.rideMins ? ` · 車程約${r.rideMins}分鐘` : '';
+                        meta = destName ? `${board} → 落：${destName}${towards}${ride}` : `${board}${towards}${ride}`;
                     } else {
                         meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
                     }
@@ -3113,6 +3114,20 @@
                     }
                     return out.sort((a, b) => a.dist - b.dist);
                 }
+                _rideMinsAlong(list, board, alight) {
+                    if (!board || !alight || !(board.seq < alight.seq)) return null;
+                    const stops = (list || []).filter(s => s && s.seq >= board.seq && s.seq <= alight.seq)
+                        .sort((a, b) => a.seq - b.seq);
+                    if (stops.length < 2) return null;
+                    let meters = 0;
+                    for (let i = 1; i < stops.length; i++) {
+                        const d = Utils.calcDistance(stops[i - 1].lat, stops[i - 1].lng, stops[i].lat, stops[i].lng);
+                        if (isFinite(d)) meters += d;
+                    }
+                    if (!(meters > 0)) return null;
+                    // 沿官方站序折線加路迂迴，再以市區巴士約每小時 15 公里估算（連埋停車），只作大約車程
+                    return Math.max(1, Math.round((meters * 1.12) / 1000 / 15 * 60));
+                }
                 async _confirmJourney(item, signal) {
                     const stops = await BusAPI.getStops(item.company, item.route, null, signal);
                     if (!stops || !stops.length || stops.error) return Object.assign({}, item, { unconfirmed: true });
@@ -3153,7 +3168,8 @@
                             destDist: isFinite(alightDist) ? Math.round(alightDist) : item.destDist,
                             variantDest: board.variantDest || alight.variantDest || item.variantDest || '',
                             variantOrig: board.variantOrig || alight.variantOrig || item.variantOrig || '',
-                            unconfirmed: false
+                            unconfirmed: false,
+                            rideMins: this._rideMinsAlong(list, board, alight)
                         });
                         if (!best) { best = cand; continue; }
                         const betterBoard = (boardDist || Infinity) < (best.dist || Infinity);
