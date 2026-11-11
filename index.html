@@ -2668,7 +2668,8 @@
                     let meta;
                     if (r.kind === 'journey') {
                         const board = walk ? `上：${name}，${walk}` : `上：${name}`;
-                        meta = destName ? `${board} → 落：${destName}` : board;
+                        const towards = r.variantDest ? `（往${r.variantDest}）` : '';
+                        meta = destName ? `${board} → 落：${destName}${towards}` : `${board}${towards}`;
                     } else {
                         meta = walk ? `最近：${name}，${walk}` : `最近：${name}`;
                     }
@@ -3006,24 +3007,31 @@
                 }
                 async _confirmJourney(item, signal) {
                     const stops = await BusAPI.getStops(item.company, item.route, null, signal);
-                    if (!stops || !stops.length || stops.error) return item;
-                    const byDir = { outbound: [], inbound: [] };
+                    if (!stops || !stops.length || stops.error) return Object.assign({}, item, { unconfirmed: true });
+                    const groups = new Map();
                     for (const s of stops) {
-                        if (s && s.error) continue;
-                        (s.direction === 'inbound' ? byDir.inbound : byDir.outbound).push(s);
+                        if (!s || s.error) continue;
+                        const dir = s.direction === 'inbound' ? 'inbound' : 'outbound';
+                        const st = String(s.serviceType || 1);
+                        const key = `${dir}|${st}`;
+                        if (!groups.has(key)) groups.set(key, []);
+                        groups.get(key).push(s);
                     }
+                    const radius = CONFIG.UI.nearbyRadiusM || 600;
                     let best = null;
-                    for (const dir of ['outbound', 'inbound']) {
-                        const list = byDir[dir];
+                    for (const list of groups.values()) {
                         if (!list.length) continue;
                         let board = list.filter(s => String(s.stopId) === String(item.stopId)).sort((a, b) => a.seq - b.seq)[0];
                         let alight = list.filter(s => String(s.stopId) === String(item.destStopId)).sort((a, b) => a.seq - b.seq)[0];
-                        if (!board) board = this._closestStopOnRoute(list, item.lat, item.lng, 150);
-                        if (!alight) alight = this._closestStopOnRoute(list, item.destLat, item.destLng, 150);
+                        if (!board) board = this._closestStopOnRoute(list, item.lat, item.lng, radius);
+                        if (!alight) alight = this._closestStopOnRoute(list, item.destLat, item.destLng, radius);
                         if (!board || !alight) continue;
                         if (!(board.seq < alight.seq)) continue;
+                        const boardDist = isFinite(item.dist) ? item.dist : Utils.calcDistance(item.lat, item.lng, board.lat, board.lng);
+                        const alightDist = Utils.calcDistance(item.destLat, item.destLng, alight.lat, alight.lng);
                         const cand = Object.assign({}, item, {
-                            direction: dir,
+                            direction: board.direction || list[0].direction,
+                            serviceType: board.serviceType || list[0].serviceType || 1,
                             stopId: board.stopId,
                             stopName: board.stopName || item.stopName,
                             lat: board.lat || item.lat,
@@ -3033,11 +3041,19 @@
                             destStopName: alight.stopName || item.destStopName,
                             destLat: alight.lat || item.destLat,
                             destLng: alight.lng || item.destLng,
-                            destSeq: alight.seq
+                            destSeq: alight.seq,
+                            destDist: isFinite(alightDist) ? Math.round(alightDist) : item.destDist,
+                            variantDest: board.variantDest || alight.variantDest || item.variantDest || '',
+                            variantOrig: board.variantOrig || alight.variantOrig || item.variantOrig || '',
+                            unconfirmed: false
                         });
-                        if (!best || (alight.seq - board.seq) < (best.destSeq - best.seq)) best = cand;
+                        if (!best) { best = cand; continue; }
+                        const betterBoard = (boardDist || Infinity) < (best.dist || Infinity);
+                        const betterAlight = !betterBoard && (cand.destDist || Infinity) < (best.destDist || Infinity);
+                        const betterSpan = !betterBoard && !betterAlight && (alight.seq - board.seq) < (best.destSeq - best.seq);
+                        if (betterBoard || betterAlight || betterSpan) best = cand;
                     }
-                    return best;
+                    return best || { invalid: true };
                 }
                 async _refineJourneys(items, signal, destLabel, extra) {
                     const cap = (items || []).slice(0, 20);
@@ -3054,8 +3070,9 @@
                     const confirmed = [];
                     for (let i = 0; i < raw.length; i++) {
                         const row = raw[i];
-                        if (!row || row.error) {
-                            if (cap[i]) confirmed.push(cap[i]);
+                        if (!row || row.invalid) continue;
+                        if (row.error) {
+                            if (cap[i]) confirmed.push(Object.assign({}, cap[i], { unconfirmed: true }));
                             continue;
                         }
                         confirmed.push(row);
