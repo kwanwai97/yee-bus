@@ -139,10 +139,20 @@
         .voice-bar button { border: none; background: #c92a2a; color: #fff; border-radius: 16px; padding: 4px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
         .result-section { display: flex; flex-direction: column; gap: 6px; }
         .result-title { font-size: 0.75rem; font-weight: 700; color: #868e96; letter-spacing: 0.3px; padding: 2px 2px 0; }
+        .dest-banner { background: #e7f5ff; border: 1px solid #a5d8ff; border-radius: 10px; padding: 8px 10px; }
+        .dest-banner .dest-k { font-size: 0.7rem; font-weight: 700; color: #1864ab; letter-spacing: 0.3px; }
+        .dest-banner .dest-v { font-size: 0.95rem; font-weight: 800; color: #1a1a2e; line-height: 1.3; margin-top: 1px; }
+        .dest-banner .dest-sub { font-size: 0.68rem; color: #6c757d; margin-top: 2px; }
+        .journey-map-wrap { border: 1px solid #e9ecef; border-radius: 10px; overflow: hidden; background: #f8f9fa; }
+        .journey-map { width: 100%; height: 160px; }
+        .journey-map-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 8px 6px; font-size: 0.62rem; color: #6c757d; }
+        .journey-map-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .journey-map-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
         .route-hit { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 1px solid #e9ecef; background: #fff; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
         .route-hit:hover { background: #f8f9fa; }
         .route-hit .route-hit-no { font-weight: 800; font-size: 1.05rem; color: #1a1a2e; min-width: 48px; }
         .route-hit .route-hit-meta { flex: 1; min-width: 0; font-size: 0.78rem; color: #495057; line-height: 1.25; }
+        .svc-note { font-size: 0.62rem; font-weight: 700; color: #e67700; background: #fff4e6; border-radius: 8px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
         .nearby-results { max-height: 24rem; }
     </style>
 </head>
@@ -1109,6 +1119,11 @@
                         }
                     }
 
+                    const isAreaOnly = parsed.area && !parsed.streets.length && !parsed.number;
+                    if (isAreaOnly && rows.length >= 2) {
+                        return this._medianPin(rows, parsed.area);
+                    }
+
                     const named = rows.filter(r => {
                         const blob = `${r.building || ''}${r.estate || ''}`;
                         if (!blob) return false;
@@ -1121,18 +1136,6 @@
                         if (sameEstate.length >= 3) return this._medianPin(sameEstate, estateName || query);
                         const best = named.slice().sort((a, b) => b.score - a.score)[0];
                         return { lat: best.lat, lng: best.lng, label: best.label, source: 'ALS' };
-                    }
-
-                    const isAreaOnly = parsed.area && !parsed.streets.length && !parsed.number;
-                    if (isAreaOnly) {
-                        const stationRows = rows.filter(r => {
-                            const blob = `${r.building || ''}${r.estate || ''}${r.label || ''}`;
-                            return blob.includes(`港鐵${parsed.area}站`) || blob.includes(`${parsed.area}鐵路站`) || blob.includes(`港鐵${parsed.area}`);
-                        });
-                        if (stationRows.length) {
-                            const best = stationRows.slice().sort((a, b) => b.score - a.score)[0];
-                            return { lat: best.lat, lng: best.lng, label: `港鐵${parsed.area}站`, source: 'ALS' };
-                        }
                     }
 
                     const best = rows.slice().sort((a, b) => b.score - a.score)[0];
@@ -1203,21 +1206,35 @@
                     }
                     return null;
                 },
-                _aliases: { '家路': '加路連山道', '家路道': '加路連山道' },
+                _aliases: { '家路': '加路連山道', '家路道': '加路連山道', '加路連山': '加路連山道' },
+                _mtrNameAliases: { '大埔': '大埔墟', '海怡': '海怡半島' },
+                _officialMtrPin(query) {
+                    const raw = String(query || '').trim();
+                    if (!raw || typeof MTRIndex === 'undefined' || !MTRIndex.stations) return null;
+                    let q = raw.replace(/^港鐵/, '').replace(/鐵路站$/, '').replace(/站$/, '');
+                    q = this._mtrNameAliases[raw] || this._mtrNameAliases[q] || q;
+                    // 「香港」「九龍」太闊，只喺用戶明確寫「站」先鎖去港鐵站
+                    if (q === '香港' && !/站/.test(raw)) return null;
+                    if (q === '九龍' && !/九龍站/.test(raw)) return null;
+                    const hits = [];
+                    for (const code of Object.keys(MTRIndex.stations)) {
+                        const s = MTRIndex.stations[code];
+                        if (s && s.n === q) hits.push({ code, n: s.n, lat: s.lat, lng: s.lng });
+                    }
+                    if (hits.length !== 1) return null;
+                    const hit = hits[0];
+                    return { lat: hit.lat, lng: hit.lng, label: `港鐵${hit.n}站`, source: 'MTR' };
+                },
                 async search(query, signal) {
                     const q0 = String(query || '').trim();
                     if (!q0) throw new Error('請輸入地址或地區名稱');
                     let lastErr = null;
                     const parsed0 = this._parseQuery(q0);
                     const alias = this._aliases[q0] || this._aliases[q0.replace(/\s+/g, '')];
-                    const isAreaOnly = parsed0.area && !parsed0.streets.length && !parsed0.number
-                        && q0.replace(/站$/, '') === parsed0.area;
+                    const official = this._officialMtrPin(q0) || (alias ? this._officialMtrPin(alias) : null);
+                    if (official) return official;
                     const alsTries = [];
                     if (alias) alsTries.push(alias);
-                    if (isAreaOnly) {
-                        alsTries.push(`港鐵${parsed0.area}站`);
-                        alsTries.push(`${parsed0.area}站`);
-                    }
                     alsTries.push(q0);
                     const seenQ = new Set();
                     for (const q of alsTries) {
@@ -1227,7 +1244,6 @@
                             const hit = await this._als(q, signal);
                             if (hit) {
                                 if (alias && q === alias) hit.label = alias;
-                                if (isAreaOnly && q.indexOf('港鐵') === 0) hit.label = `港鐵${parsed0.area}站`;
                                 return hit;
                             }
                         } catch (e) {
@@ -1412,6 +1428,8 @@
                             dist: from.dist,
                             walkMins: NearbyIndex.walkMins(from.dist),
                             destStopName: to.name,
+                            destLat: to.lat,
+                            destLng: to.lng,
                             destDist: to.dist,
                             destWalkMins: NearbyIndex.walkMins(to.dist),
                             rideMins: Math.max(1, route.mins),
@@ -1631,9 +1649,35 @@
                     return data;
                 }
 
+                static async _getCTBRouteMeta(route, signal) {
+                    const cacheKey = `CTB:routeMeta:${route}`;
+                    const cached = routeCache.get(cacheKey);
+                    if (cached) return cached;
+                    const map = {};
+                    try {
+                        const json = await Fetcher.fetchJSON(`${CONFIG.API.CTB}/route/CTB/${route}`, { signal, maxAttempts: 1 });
+                        const raw = json && json.data;
+                        const rows = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? [raw] : []);
+                        for (const r of rows) {
+                            const orig = r.orig_tc || '';
+                            const dest = r.dest_tc || '';
+                            if (r.bound || r.dir) {
+                                const dir = this._boundToDir(r.bound || r.dir);
+                                map[dir] = { orig, dest };
+                            } else if (orig || dest) {
+                                // 官方單筆結果冇 bound，去程用列出嘅終點，回程對調
+                                map.outbound = { orig, dest };
+                                if (orig && dest) map.inbound = { orig: dest, dest: orig };
+                            }
+                        }
+                    } catch (e) {}
+                    routeCache.set(cacheKey, map);
+                    return map;
+                }
                 static async _fetchCTBStops(route, direction, signal) {
                     // 先載入全站清單（約一次／日內），再只打 route-stop；缺漏站先回退單站 API
                     await CTBStops.load();
+                    const meta = await this._getCTBRouteMeta(route, signal);
                     const dirs = direction ? [direction] : ['outbound', 'inbound'];
                     const lists = await Promise.all(dirs.map(async (dir) => {
                         const url = `${CONFIG.API.CTB}/route-stop/CTB/${route}/${dir}`;
@@ -1660,6 +1704,7 @@
                     }
                     const all = [];
                     for (const { dir, data } of lists) {
+                        const info = meta[dir] || {};
                         for (const item of data) {
                             const id = item.stop;
                             const stopInfo = CTBStops.get(id) || stopCache.get(`CTB:stop:${id}`) || {};
@@ -1669,7 +1714,9 @@
                                 direction: dir,
                                 stopName: stopInfo.name_tc || '城巴車站',
                                 lat: parseFloat(stopInfo.lat) || 0,
-                                lng: parseFloat(stopInfo.long) || 0
+                                lng: parseFloat(stopInfo.long) || 0,
+                                variantOrig: info.orig || '',
+                                variantDest: info.dest || ''
                             });
                         }
                     }
@@ -2877,6 +2924,15 @@
                 _rangeHint() {
                     return '約五至十分鐘步行（約 300 至 600 米）';
                 }
+                _routeServiceNote(r) {
+                    const no = String((r && r.route) || '');
+                    const label = String((r && r.routeLabel) || '');
+                    const blob = `${no} ${label}`;
+                    if (/^N[A-Z]?\d/i.test(no) || /(?:^|[+轉])N[A-Z]?\d/i.test(label)) return '通宵';
+                    if (no === '889' || no === '891' || /(?:^|[+轉])(?:889|891)(?!\d)/.test(label)) return '賽馬日';
+                    if (/^X\d/i.test(no) || /(?:^|[+轉])X\d/i.test(label) || /(?:^|[+轉\s])1R(?![A-Z0-9])/i.test(blob)) return '特別班';
+                    return '';
+                }
                 _nearbyRouteButtonHtml(r) {
                     const co = this._companyLabel(r.company);
                     const name = StopPlates.label(r.stopName || '', r.stopId);
@@ -2900,7 +2956,9 @@
                     const destId = r.destStopId || '';
                     const kind = r.kind || '';
                     const label = (r.kind === 'mtr') ? '地鐵' : (r.kind === 'transfer' ? (r.routeLabel || '轉乘') : r.route);
-                    return `<button type="button" class="route-hit nearby-route-hit" data-kind="${Utils.escapeHtml(kind)}" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat || ''}" data-lng="${r.lng || ''}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}" data-summary="${Utils.escapeHtml(r.summary || '')}"><span class="badge badge-${String(r.company || '').toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(label)}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                    const note = this._routeServiceNote(r);
+                    const noteHtml = note ? `<span class="svc-note">${Utils.escapeHtml(note)}</span>` : '';
+                    return `<button type="button" class="route-hit nearby-route-hit" data-kind="${Utils.escapeHtml(kind)}" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat || ''}" data-lng="${r.lng || ''}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}" data-summary="${Utils.escapeHtml(r.summary || '')}"><span class="badge badge-${String(r.company || '').toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(label)}${noteHtml}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
                 }
                 _renderNearbyRouteSection(routes, originLabel, mode) {
                     const sec = document.createElement('div');
@@ -3063,28 +3121,153 @@
                 async _searchNearbyByAddress() {
                     return this._searchExplore();
                 }
-                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib, journeys, destLabel, fromHere }) {
+                _destBannerEl(dest, destLabel) {
+                    const label = (dest && dest.label) || destLabel || '';
+                    if (!label) return null;
+                    const el = document.createElement('div');
+                    el.className = 'dest-banner';
+                    const subParts = [];
+                    if (dest && isFinite(dest.lat) && isFinite(dest.lng)) {
+                        subParts.push(`${Number(dest.lat).toFixed(5)}, ${Number(dest.lng).toFixed(5)}`);
+                    }
+                    if (dest && dest.source) {
+                        const src = dest.source === 'MTR' ? '官方地鐵站位置' : dest.source === 'ALS' ? '政府地址搜尋' : dest.source;
+                        subParts.push(src);
+                    }
+                    el.innerHTML = `<div class="dest-k">目的地</div><div class="dest-v">${Utils.escapeHtml(label)}</div>`
+                        + (subParts.length ? `<div class="dest-sub">${Utils.escapeHtml(subParts.join(' · '))}</div>` : '');
+                    return el;
+                }
+                _originForMap() {
+                    if (this.gps && this.gps.isReady()) return { lat: this.gps.lat, lng: this.gps.lng, label: '起點' };
+                    if (this._nearbyOrigin && isFinite(this._nearbyOrigin.lat)) {
+                        return { lat: this._nearbyOrigin.lat, lng: this._nearbyOrigin.lng, label: this._nearbyOrigin.label || '起點' };
+                    }
+                    return null;
+                }
+                _loadLeaflet() {
+                    if (typeof window !== 'undefined' && window.L) return Promise.resolve(window.L);
+                    if (this._leafletReady) return this._leafletReady;
+                    this._leafletReady = new Promise((resolve, reject) => {
+                        const cssId = 'yee-leaflet-css';
+                        if (!document.getElementById(cssId)) {
+                            const link = document.createElement('link');
+                            link.id = cssId;
+                            link.rel = 'stylesheet';
+                            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+                            document.head.appendChild(link);
+                        }
+                        const s = document.createElement('script');
+                        s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+                        s.async = true;
+                        s.onload = () => resolve(window.L);
+                        s.onerror = () => reject(new Error('leaflet'));
+                        document.head.appendChild(s);
+                    });
+                    return this._leafletReady;
+                }
+                _scheduleJourneyMap(host, dest, journeys) {
+                    if (!dest || !isFinite(dest.lat) || !isFinite(dest.lng) || !host) return;
+                    const wrap = document.createElement('div');
+                    wrap.className = 'journey-map-wrap';
+                    const mapEl = document.createElement('div');
+                    mapEl.className = 'journey-map';
+                    mapEl.setAttribute('role', 'img');
+                    mapEl.setAttribute('aria-label', '起點、目的地同車站地圖');
+                    wrap.appendChild(mapEl);
+                    const legend = document.createElement('div');
+                    legend.className = 'journey-map-legend';
+                    legend.innerHTML = '<span><i style="background:#1c7ed6"></i>起點</span><span><i style="background:#c92a2a"></i>目的地</span><span><i style="background:#2b8a3e"></i>上車</span><span><i style="background:#e67700"></i>落車</span><span><i style="background:#7048e8"></i>轉車</span>';
+                    wrap.appendChild(legend);
+                    host.appendChild(wrap);
+                    const origin = this._originForMap();
+                    const first = (journeys || []).find(j => j && (j.kind === 'journey' || j.kind === 'transfer' || j.kind === 'mtr')) || null;
+                    Promise.resolve().then(() => this._paintJourneyMap(mapEl, dest, origin, first, wrap));
+                }
+                async _paintJourneyMap(mapEl, dest, origin, journey, wrap) {
+                    if (!mapEl || !mapEl.isConnected) return;
+                    try {
+                        const L = await this._loadLeaflet();
+                        if (!mapEl.isConnected || !L) return;
+                        if (this._journeyMap) {
+                            this._journeyMap.remove();
+                            this._journeyMap = null;
+                        }
+                        const points = [];
+                        const add = (lat, lng, name, color) => {
+                            if (!isFinite(lat) || !isFinite(lng)) return;
+                            points.push({ lat, lng, name, color });
+                        };
+                        if (origin) add(origin.lat, origin.lng, origin.label || '起點', '#1c7ed6');
+                        add(dest.lat, dest.lng, '目的地：' + (dest.label || ''), '#c92a2a');
+                        if (journey) {
+                            add(journey.lat, journey.lng, (journey.kind === 'mtr' ? '入閘：' : '上車：') + (journey.stopName || ''), '#2b8a3e');
+                            add(journey.destLat, journey.destLng, (journey.kind === 'mtr' ? '出閘：' : '落車：') + (journey.destStopName || ''), '#e67700');
+                            if (journey.kind === 'transfer') add(journey.xferLat, journey.xferLng, '轉車：' + (journey.xferName || ''), '#7048e8');
+                        }
+                        if (!points.length) return;
+                        const map = L.map(mapEl, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+                        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '&copy; OpenStreetMap'
+                        }).addTo(map);
+                        const layer = [];
+                        for (const p of points) {
+                            layer.push(L.circleMarker([p.lat, p.lng], {
+                                radius: 7, color: '#fff', weight: 1.5, fillColor: p.color, fillOpacity: 1
+                            }).bindPopup(p.name).addTo(map));
+                        }
+                        const b = L.latLngBounds(points.map(p => [p.lat, p.lng]));
+                        map.fitBounds(b, { padding: [22, 22], maxZoom: 16 });
+                        this._journeyMap = map;
+                        setTimeout(() => { try { if (mapEl.isConnected && mapEl.clientHeight > 0) map.invalidateSize(); } catch (e) {} }, 80);
+                    } catch (e) {
+                        // Leaflet 載入失敗就改用 OSM 內嵌圖，至少顯示目的地
+                        if (!wrap || !mapEl.isConnected) return;
+                        const lat = dest.lat, lng = dest.lng;
+                        const d = 0.01;
+                        const iframe = document.createElement('iframe');
+                        iframe.className = 'journey-map';
+                        iframe.title = '目的地地圖';
+                        iframe.loading = 'lazy';
+                        iframe.referrerPolicy = 'no-referrer';
+                        iframe.src = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-d}%2C${lat-d}%2C${lng+d}%2C${lat+d}&layer=mapnik&marker=${lat}%2C${lng}`;
+                        mapEl.replaceWith(iframe);
+                    }
+                }
+                _renderExploreResults({ routes, stops, nearby, nearbyRoutes, nearbyLabel, attrib, journeys, destLabel, fromHere, dest }) {
                     const box = this.elements.nearbyResults;
                     box.hidden = false;
                     box.innerHTML = '';
+                    if (this._journeyMap) {
+                        try { this._journeyMap.remove(); } catch (e) {}
+                        this._journeyMap = null;
+                    }
                     const hasJourneys = journeys && journeys.length;
                     const hasNearbyRoutes = nearbyRoutes && nearbyRoutes.length;
                     const hasAny = hasJourneys || hasNearbyRoutes || (routes && routes.length) || (stops && stops.length) || (nearby && nearby.length);
+                    const destPin = dest && isFinite(dest.lat) ? dest : (destLabel ? { label: destLabel } : null);
+                    if (destPin && destPin.label) {
+                        const banner = this._destBannerEl(destPin, destLabel);
+                        if (banner) box.appendChild(banner);
+                    }
                     if (!hasAny) {
                         const empty = document.createElement('div');
                         empty.className = 'nearby-empty';
                         empty.textContent = destLabel
-                            ? `附近${this._rangeHint()}內暫時搵唔到可以去到「${destLabel}」嘅直達路線`
+                            ? `附近${this._rangeHint()}內暫時搵唔到可以去到「${destLabel}」嘅直達或轉乘路線`
                             : (nearbyLabel
                                 ? `喺「${nearbyLabel}」${this._rangeHint()}內搵唔到巴士路線，可改試更完整嘅地址`
                                 : '搵唔到相符嘅路線、車站或附近站，可改試站名、地址或路線號碼');
                         box.appendChild(empty);
+                        if (destPin && isFinite(destPin.lat)) this._scheduleJourneyMap(box, destPin, []);
                         return;
                     }
                     if (fromHere || destLabel || hasJourneys) {
                         const mode = fromHere ? 'fromHere' : 'journey';
                         const label = fromHere ? (nearbyLabel || destLabel) : destLabel;
                         box.appendChild(this._renderNearbyRouteSection(journeys || [], label, mode));
+                        if (destPin && isFinite(destPin.lat) && !fromHere) this._scheduleJourneyMap(box, destPin, journeys || []);
                         if (attrib) {
                             const el = document.createElement('div');
                             el.className = 'nearby-attrib';
@@ -3196,6 +3379,21 @@
                                 if (!part || part.error) continue;
                                 journeys.push(...part);
                             }
+                            if (!journeys.length) {
+                                const retry = targets.map(r => async () => {
+                                    try {
+                                        return await this._directionsFromHere(r.company, r.route, origin, signal, 800);
+                                    } catch (e) {
+                                        if (e && e.name === 'AbortError') throw e;
+                                        return [];
+                                    }
+                                });
+                                const more = await Utils.parallelLimit(retry, CONFIG.UI.maxConcurrentRequests);
+                                for (const part of more) {
+                                    if (!part || part.error) continue;
+                                    journeys.push(...part);
+                                }
+                            }
                             journeys.sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
                             fromHere = true;
                             routes = [];
@@ -3265,7 +3463,8 @@
                                 if (more && more.length) extras.push(...more.filter(x => x && x.kind !== 'mtr'));
                             }
                             journeys = extras.filter(x => x && x.kind === 'mtr').concat(confirmed, extras.filter(x => x && x.kind !== 'mtr'));
-                            this._renderExploreResults({ routes: [], stops: [], journeys, destLabel, nearby: [], nearbyRoutes: [], nearbyLabel: '', attrib });
+                            this._lastDest = dest || null;
+                            this._renderExploreResults({ routes: [], stops: [], journeys, destLabel, nearby: [], nearbyRoutes: [], nearbyLabel: '', attrib, dest });
                             const busN = confirmed.length;
                             const xferN = journeys.filter(x => x && (x.kind === 'mtr' || x.kind === 'transfer')).length;
                             if (journeys.length) {
@@ -3279,7 +3478,7 @@
                                 this._setNearbyHint(`已定位目的地「${destLabel}」，附近${this._rangeHint()}內暫時搵唔到直達或轉乘。`, 'error');
                             }
                         } else {
-                            this._renderExploreResults({ routes, stops, journeys, destLabel, nearby, nearbyRoutes, nearbyLabel, attrib });
+                            this._renderExploreResults({ routes, stops, journeys, destLabel, nearby, nearbyRoutes, nearbyLabel, attrib, dest });
                             this._setNearbyHint(routes.length || stops.length
                                 ? `搵到${routes.length ? ' ' + routes.length + ' 條相符路線' : ''}${stops.length ? '、' + stops.length + ' 個車站' : ''}。`
                                 : `搵唔到「${raw}」，可改試更完整嘅門牌或街道名稱。`,
@@ -3450,6 +3649,11 @@
                                     direction: bestLink.board.direction,
                                     destStopId: alight.stopId,
                                     destStopName: alight.stopName,
+                                    destLat: alight.lat,
+                                    destLng: alight.lng,
+                                    xferName: bestLink.name + '站',
+                                    xferLat: bestLink.lat,
+                                    xferLng: bestLink.lng,
                                     rideMins: (rail.mins || 0) + (busMins || 0),
                                     totalWalkMins: walk1 + walk2 + walk3,
                                     dist: originMtr.dist,
@@ -3491,6 +3695,11 @@
                                     direction: board.direction,
                                     destStopId: bestLink.alight.stopId,
                                     destStopName: bestLink.alight.stopName,
+                                    destLat: bestLink.alight.lat,
+                                    destLng: bestLink.alight.lng,
+                                    xferName: bestLink.name + '站',
+                                    xferLat: bestLink.lat,
+                                    xferLng: bestLink.lng,
                                     rideMins: (busMins || 0) + (rail.mins || 0),
                                     totalWalkMins: walk1 + walk2 + walk3,
                                     dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)),
@@ -3514,10 +3723,26 @@
                     }
                     return this._dedupeTransfers(results);
                 }
+                _transferSpecialScore(row) {
+                    const label = String((row && (row.routeLabel || row.route)) || '');
+                    const parts = label.replace(/^地鐵\+/, '').split(/轉|\+/);
+                    let score = 0;
+                    for (const p of parts) {
+                        const no = String(p || '').trim();
+                        if (/^X\d/i.test(no) || no === '1R') score += 2;
+                        else if (/^N[A-Z]?\d/i.test(no)) score += 1;
+                    }
+                    return score;
+                }
                 _dedupeTransfers(rows) {
                     const seen = new Set();
                     const out = [];
-                    for (const r of (rows || []).sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || (a.totalWalkMins || 0) - (b.totalWalkMins || 0))) {
+                    const ranked = (rows || []).slice().sort((a, b) =>
+                        this._transferSpecialScore(a) - this._transferSpecialScore(b)
+                        || (a.rideMins || 999) - (b.rideMins || 999)
+                        || (a.totalWalkMins || 0) - (b.totalWalkMins || 0)
+                    );
+                    for (const r of ranked) {
                         const key = `${r.kind}|${r.company}|${r.route}|${r.summary}`;
                         if (seen.has(key)) continue;
                         seen.add(key);
@@ -3567,6 +3792,11 @@
                                         direction: board.direction,
                                         destStopId: alight.stopId,
                                         destStopName: alight.stopName,
+                                        destLat: alight.lat,
+                                        destLng: alight.lng,
+                                        xferName: StopPlates.label(best.sA.stopName, best.sA.stopId),
+                                        xferLat: best.sA.lat,
+                                        xferLng: best.sA.lng,
                                         rideMins: ride,
                                         totalWalkMins: walk1 + walk2 + walk3,
                                         dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, board.lat, board.lng)),
@@ -3577,8 +3807,12 @@
                             }
                         }
                     }
-                    out.sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || a.dist - b.dist);
-                    return out.slice(0, 6);
+                    out.sort((a, b) =>
+                        this._transferSpecialScore(a) - this._transferSpecialScore(b)
+                        || (a.rideMins || 999) - (b.rideMins || 999)
+                        || a.dist - b.dist
+                    );
+                    return out.slice(0, 8);
                 }
                 async _busBusTwoTransfers(origin, dest, originPacks, destPacks, xferM, signal) {
                     const midCap = CONFIG.UI.transferMaxMidRoutes || 8;
@@ -3695,6 +3929,11 @@
                                 direction: first.row.board.direction,
                                 destStopId: last.row.alight.stopId,
                                 destStopName: last.row.alight.stopName,
+                                destLat: last.row.alight.lat,
+                                destLng: last.row.alight.lng,
+                                xferName: midBoard.stopName,
+                                xferLat: midBoard.lat,
+                                xferLng: midBoard.lng,
                                 rideMins: r1 + r2 + r3,
                                 totalWalkMins: walk,
                                 dist: Math.round(Utils.calcDistance(origin.lat, origin.lng, first.row.board.lat, first.row.board.lng)),
@@ -3703,7 +3942,11 @@
                             });
                         }
                     }
-                    out.sort((a, b) => (a.rideMins || 999) - (b.rideMins || 999) || a.dist - b.dist);
+                    out.sort((a, b) =>
+                        this._transferSpecialScore(a) - this._transferSpecialScore(b)
+                        || (a.rideMins || 999) - (b.rideMins || 999)
+                        || a.dist - b.dist
+                    );
                     return out.slice(0, 4);
                 }
                                 _closestStopOnRoute(stops, lat, lng, maxM) {
@@ -3726,7 +3969,7 @@
                     }
                     return bestBoard || best;
                 }
-                async _directionsFromHere(company, route, origin, signal) {
+                async _directionsFromHere(company, route, origin, signal, radiusM) {
                     const stops = await BusAPI.getStops(company, route, null, signal);
                     if (!stops || !stops.length || stops.error) return [];
                     const groups = new Map();
@@ -3738,7 +3981,7 @@
                         if (!groups.has(key)) groups.set(key, []);
                         groups.get(key).push(s);
                     }
-                    const radius = CONFIG.UI.nearbyRadiusM || 600;
+                    const radius = radiusM || CONFIG.UI.nearbyRadiusM || 600;
                     const seen = new Set();
                     const out = [];
                     for (const list of groups.values()) {
