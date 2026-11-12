@@ -58,6 +58,7 @@
         .badge-kmb { background: #d63333; }
         .badge-ctb { background: #f59f00; color: #212529; }
         .badge-nlb { background: #1c7ed6; }
+        .badge-joint { background: linear-gradient(180deg, #d63333 0 52%, #f59f00 52% 100%); color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.35); }
         .route-name { font-size: 1.35rem; font-weight: 800; min-width: 34px; max-width: 56px; text-align: center; color: #1a1a2e; overflow: hidden; white-space: nowrap; line-height: 1; align-self: center; }
         .route-left { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; width: 40px; min-width: 36px; max-width: 56px; overflow: visible; }
         .route-left .badge { width: 100%; border-radius: 12px; padding: 1px 4px; font-size: 0.62rem; min-width: unset; }
@@ -115,6 +116,7 @@
         .nearby-chip.badge-kmb { background: #d63333; }
         .nearby-chip.badge-ctb { background: #f59f00; color: #212529; }
         .nearby-chip.badge-nlb { background: #1c7ed6; }
+        .nearby-chip.badge-joint, .route-hit .badge-joint { background: linear-gradient(180deg, #d63333 0 52%, #f59f00 52% 100%); color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.35); }
         .nearby-chip.badge-mtr, .route-hit .badge-mtr { background: #e4002b; }
         .nearby-attrib { font-size: 0.62rem; color: #adb5bd; margin-top: 6px; text-align: right; }
         .nearby-empty { text-align: center; color: #868e96; font-size: 0.8rem; padding: 10px 0; }
@@ -253,6 +255,7 @@
                     nearbyRadiusM: 600,
                     nearbyMinRadiusM: 300,
                     nearbyMaxStops: 40,
+                    jointStopRadiusM: 80,
                     mtrWalkM: 800,
                     transferWalkM: 400,
                     transferLinkWalkM: 400,
@@ -784,7 +787,84 @@
                             }
                         }
                     }
-                    return [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    const rows = [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    return this.mergeJointRoutes(rows);
+                },
+                otherJointCompany(company) {
+                    const c = String(company || '').toUpperCase();
+                    if (c === 'KMB') return 'CTB';
+                    if (c === 'CTB') return 'KMB';
+                    return null;
+                },
+                isJointPair(a, b) {
+                    const x = String(a || '').toUpperCase();
+                    const y = String(b || '').toUpperCase();
+                    return (x === 'KMB' && y === 'CTB') || (x === 'CTB' && y === 'KMB');
+                },
+                isJointRoute(route) {
+                    const r = String(route || '').toUpperCase();
+                    if (!r) return false;
+                    if (!this._jointCache) this._jointCache = Object.create(null);
+                    if (Object.prototype.hasOwnProperty.call(this._jointCache, r)) return this._jointCache[r];
+                    const kmb = new Set();
+                    const ctb = new Set();
+                    for (const d of KMBStops.all()) {
+                        for (const x of (d.routes || [])) if (x) kmb.add(String(x).toUpperCase());
+                    }
+                    for (const d of CTBStops.all()) {
+                        for (const x of (d.routes || [])) if (x) ctb.add(String(x).toUpperCase());
+                    }
+                    const all = new Set([...kmb, ...ctb]);
+                    if (all.size === 0) return false;
+                    for (const x of all) this._jointCache[x] = kmb.has(x) && ctb.has(x);
+                    return !!this._jointCache[r];
+                },
+                mergeJointRoutes(routes, radiusM) {
+                    const radius = radiusM || CONFIG.UI.jointStopRadiusM || 80;
+                    const list = Array.isArray(routes) ? routes.slice() : [];
+                    const used = new Set();
+                    const out = [];
+                    for (let i = 0; i < list.length; i++) {
+                        if (used.has(i)) continue;
+                        const a = list[i];
+                        if (!a || a.kind === 'mtr' || a.kind === 'transfer' || !this.isJointRoute(a.route)) {
+                            out.push(a);
+                            used.add(i);
+                            continue;
+                        }
+                        let partner = -1;
+                        let partnerDist = Infinity;
+                        for (let j = i + 1; j < list.length; j++) {
+                            if (used.has(j)) continue;
+                            const b = list[j];
+                            if (!b || String(b.route) !== String(a.route) || !this.isJointPair(a.company, b.company)) continue;
+                            if ((a.kind === 'journey' || b.kind === 'journey') && isFinite(a.destLat) && isFinite(b.destLat)) {
+                                const dd = Utils.calcDistance(a.destLat, a.destLng, b.destLat, b.destLng);
+                                if (!isFinite(dd) || dd > Math.max(radius, 200)) continue;
+                            }
+                            const d = Utils.calcDistance(a.lat, a.lng, b.lat, b.lng);
+                            if (!isFinite(d) || d > radius) continue;
+                            if (d < partnerDist) { partner = j; partnerDist = d; }
+                        }
+                        used.add(i);
+                        if (partner === -1) { out.push(a); continue; }
+                        used.add(partner);
+                        const b = list[partner];
+                        const primary = (isFinite(a.dist) && isFinite(b.dist) && b.dist < a.dist) ? b : a;
+                        const secondary = primary === a ? b : a;
+                        out.push(Object.assign({}, primary, {
+                            company: primary.company,
+                            displayCompany: 'JOINT',
+                            jointCompany: secondary.company,
+                            jointStopId: secondary.stopId,
+                            jointStopName: secondary.stopName,
+                            jointLat: secondary.lat,
+                            jointLng: secondary.lng,
+                            jointRouteId: secondary.routeId || '',
+                            companies: [a.company, b.company]
+                        }));
+                    }
+                    return out;
                 },
                 routesToDestination(originLat, originLng, destLat, destLng, radiusM) {
                     const radius = radiusM || CONFIG.UI.nearbyRadiusM;
@@ -833,7 +913,8 @@
                             }
                         }
                     }
-                    return [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    const rows = [...map.values()].sort((a, b) => a.dist - b.dist || String(a.route).localeCompare(String(b.route), 'zh-Hant', { numeric: true }));
+                    return this.mergeJointRoutes(rows);
                 },
                 _norm(text) {
                     return String(text || '').toLowerCase().replace(/\s+/g, '');
@@ -1833,7 +1914,65 @@
                     }
                     return out;
                 }
+                static destKey(s) {
+                    return String(s || '').replace(/[()（）\[\]\s]/g, '').toLowerCase();
+                }
+                static destsMatch(a, b) {
+                    const x = this.destKey(a), y = this.destKey(b);
+                    if (!x || !y) return false;
+                    return x === y || x.includes(y) || y.includes(x);
+                }
+                static async _pickJointCounterpart(watchItem) {
+                    const other = NearbyIndex.otherJointCompany(watchItem.company);
+                    if (!other) return null;
+                    await NearbyIndex.ensureCore();
+                    if (!NearbyIndex.isJointRoute(watchItem.route)) return null;
+                    const lat = parseFloat(watchItem.lat), lng = parseFloat(watchItem.lng);
+                    if (!isFinite(lat) || !isFinite(lng)) return null;
+                    const stops = await this.getStops(other, watchItem.route);
+                    const radius = CONFIG.UI.jointStopRadiusM || 80;
+                    let hint = watchItem._destHint || '';
+                    if (!hint) {
+                        const own = this._cachedRouteStops(watchItem.company, watchItem.route, watchItem.direction) || [];
+                        const me = own.find(s => String(s.stopId) === String(watchItem.stopId) && (!watchItem.direction || s.direction === watchItem.direction));
+                        hint = (me && me.variantDest) || '';
+                    }
+                    let best = null, bestD = Infinity;
+                    for (const s of (stops || [])) {
+                        if (!s || s.error || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+                        const d = Utils.calcDistance(lat, lng, s.lat, s.lng);
+                        if (!isFinite(d) || d > radius) continue;
+                        if (hint && s.variantDest && !this.destsMatch(hint, s.variantDest)) continue;
+                        if (d < bestD) { best = s; bestD = d; }
+                    }
+                    return best ? Object.assign({}, best, { company: other, dist: Math.round(bestD) }) : null;
+                }
                 static async getETA(watchItem) {
+                    const arrivals = await this._fetchOwnETA(watchItem);
+                    try {
+                        const destHint = (arrivals[0] && arrivals[0].dest_tc) || '';
+                        const other = await this._pickJointCounterpart(Object.assign({}, watchItem, { _destHint: destHint }));
+                        if (!other) return arrivals.slice(0, CONFIG.UI.maxETAShow);
+                        const extraItem = Object.assign({}, watchItem, {
+                            company: other.company,
+                            stopId: other.stopId,
+                            stopName: other.stopName,
+                            direction: other.direction,
+                            seq: other.seq,
+                            serviceType: other.serviceType || 1,
+                            lat: other.lat,
+                            lng: other.lng,
+                            routeId: other.routeId || null
+                        });
+                        const extra = await this._fetchOwnETA(extraItem);
+                        const dest = destHint || (extra[0] && extra[0].dest_tc) || '';
+                        const filtered = dest ? extra.filter(a => this.destsMatch(a.dest_tc, dest)) : extra;
+                        return this._dedupeArrivals(arrivals.concat(filtered)).slice(0, CONFIG.UI.maxETAShow);
+                    } catch (e) {
+                        return arrivals.slice(0, CONFIG.UI.maxETAShow);
+                    }
+                }
+                static async _fetchOwnETA(watchItem) {
                     const { company, route, stopId, serviceType, direction } = watchItem;
                     if (company === 'KMB') {
                         const cached = this._cachedRouteStops('KMB', route, direction);
@@ -1852,11 +1991,11 @@
                         const parts = await Utils.parallelLimit(tasks, 3);
                         const merged = [];
                         for (const part of parts) if (Array.isArray(part)) merged.push(...part);
-                        return this._dedupeArrivals(merged).slice(0, CONFIG.UI.maxETAShow);
+                        return this._dedupeArrivals(merged);
                     }
                     if (company === 'CTB') {
                         const json = await Fetcher.fetchJSON(`${CONFIG.API.CTB}/eta/CTB/${stopId}/${route}`);
-                        return this._dedupeArrivals(this._parseETA(company, json, watchItem)).slice(0, CONFIG.UI.maxETAShow);
+                        return this._dedupeArrivals(this._parseETA(company, json, watchItem));
                     }
                     if (company === 'NLB') {
                         const cached = this._cachedRouteStops('NLB', route, direction);
@@ -1889,7 +2028,7 @@
                         const parts = await Utils.parallelLimit(tasks, 3);
                         const merged = [];
                         for (const part of parts) if (Array.isArray(part)) merged.push(...part);
-                        return this._dedupeArrivals(merged).slice(0, CONFIG.UI.maxETAShow);
+                        return this._dedupeArrivals(merged);
                     }
                     throw new Error('不支援的巴士公司');
                 }
@@ -2327,19 +2466,24 @@
                     this.elements.busList.addEventListener('click', (e) => {
                         const btn = e.target.closest('.del-btn');
                         if (!btn) return;
-                        const key = btn.dataset.key;
-                        if (!key) return;
-                        const parts = key.split('|');
-                        const company = parts[0], route = parts[1], stopId = parts[2], direction = parts[3];
-                        const serviceType = parts[4] || '1';
-                        const idx = this.watchList.items.findIndex(it =>
-                            it.company === company &&
-                            it.route === route &&
-                            it.stopId === stopId &&
-                            it.direction === direction &&
-                            String(it.serviceType || 1) === String(serviceType)
-                        );
-                        if (idx !== -1) { this.watchList.remove(idx); this.fetchETA(); this.showToast('已移除'); }
+                        const raw = btn.dataset.keys || btn.dataset.key || '';
+                        const keys = raw.split('||').map(k => k.trim()).filter(k => k && !k.startsWith('JOINT|'));
+                        if (!keys.length) return;
+                        let removed = 0;
+                        for (const key of keys) {
+                            const parts = key.split('|');
+                            const company = parts[0], route = parts[1], stopId = parts[2], direction = parts[3];
+                            const serviceType = parts[4] || '1';
+                            const idx = this.watchList.items.findIndex(it =>
+                                it.company === company &&
+                                it.route === route &&
+                                it.stopId === stopId &&
+                                it.direction === direction &&
+                                String(it.serviceType || 1) === String(serviceType)
+                            );
+                            if (idx !== -1 && this.watchList.remove(idx)) removed += 1;
+                        }
+                        if (removed) { this.fetchETA(); this.showToast(removed > 1 ? '已移除聯營路線' : '已移除'); }
                     });
                 }
 
@@ -2732,12 +2876,46 @@
                         const resultByIndex = new Map();
                         for (let r = 0; r < results.length; r++) resultByIndex.set(results[r].index, results[r]);
 
-                        const fragment = document.createDocumentFragment();
+                        const rows = [];
                         for (let i = 0; i < list.length; i++) {
-                            const item = list[i];
                             const result = resultByIndex.get(i) || { arrivals: [], error: null };
-                            const arrivals = result.arrivals || [];
-                            const error = result.error || null;
+                            rows.push({ item: list[i], index: i, arrivals: result.arrivals || [], error: result.error || null });
+                        }
+                        const used = new Set();
+                        const clusters = [];
+                        const jointRadius = CONFIG.UI.jointStopRadiusM || 80;
+                        for (let i = 0; i < rows.length; i++) {
+                            if (used.has(i)) continue;
+                            const a = rows[i];
+                            const cluster = [a];
+                            used.add(i);
+                            const destA = (a.arrivals[0] && a.arrivals[0].dest_tc) || '';
+                            if (NearbyIndex.isJointRoute(a.item.route)) {
+                                for (let j = i + 1; j < rows.length; j++) {
+                                    if (used.has(j)) continue;
+                                    const b = rows[j];
+                                    if (String(b.item.route) !== String(a.item.route)) continue;
+                                    if (!NearbyIndex.isJointPair(a.item.company, b.item.company)) continue;
+                                    const d = Utils.calcDistance(a.item.lat, a.item.lng, b.item.lat, b.item.lng);
+                                    if (!isFinite(d) || d > jointRadius) continue;
+                                    const destB = (b.arrivals[0] && b.arrivals[0].dest_tc) || '';
+                                    if (destA && destB && !BusAPI.destsMatch(destA, destB)) continue;
+                                    cluster.push(b);
+                                    used.add(j);
+                                }
+                            }
+                            clusters.push(cluster);
+                        }
+
+                        const fragment = document.createDocumentFragment();
+                        for (const cluster of clusters) {
+                            const item = cluster.slice().sort((a, b) => {
+                                const da = this.gps.getDistance(a.item.lat, a.item.lng);
+                                const db = this.gps.getDistance(b.item.lat, b.item.lng);
+                                return (da || Infinity) - (db || Infinity);
+                            })[0].item;
+                            const arrivals = BusAPI._dedupeArrivals(cluster.flatMap(c => c.arrivals || [])).slice(0, CONFIG.UI.maxETAShow);
+                            const error = cluster.every(c => c.error) ? cluster[0].error : null;
                             const dist = this.gps.getDistance(item.lat, item.lng);
                             const walkMins = isFinite(dist) ? Math.ceil(dist / CONFIG.UI.walkSpeedMpm) : null;
                             let etaMins = null, dest = '目的地', etaDisplay = '--', statusHtml = '', extraETAs = [];
@@ -2770,15 +2948,20 @@
                                 item._etaMins = 999;
                             }
                             const walkText = walkMins !== null ? `🚶 ${Math.round(dist)}m (約${walkMins}分)` : '🚶 定位中';
-                            const company = Utils.escapeHtml(item.company);
+                            const isJoint = cluster.length > 1 || NearbyIndex.isJointRoute(item.route);
+                            const company = Utils.escapeHtml(isJoint ? '聯營' : item.company);
                             const routeEsc = Utils.escapeHtml(item.route);
                             const destEsc = Utils.escapeHtml(dest);
                             const stopEsc = Utils.escapeHtml(StopPlates.label(item.stopName || '', item.stopId));
                             const remarkText = (arrivals && arrivals[0] && arrivals[0].remark) ? String(arrivals[0].remark).trim() : '';
                             const remarkHtml = remarkText ? `<div class="eta-remark">${Utils.escapeHtml(remarkText)}</div>` : '';
-                            const badgeClass = `badge-${String(item.company || '').toLowerCase()}`;
-                            const itemKey = `${item.company}|${item.route}|${item.stopId}|${item.direction}|${item.serviceType || 1}`;
-                            const keyEsc = Utils.escapeHtml(itemKey);
+                            const badgeClass = `badge-${isJoint ? 'joint' : String(item.company || '').toLowerCase()}`;
+                            const watchKeys = cluster.map(c => `${c.item.company}|${c.item.route}|${c.item.stopId}|${c.item.direction}|${c.item.serviceType || 1}`);
+                            const itemKey = (cluster.length > 1)
+                                ? `JOINT|${item.route}|${watchKeys.slice().sort().join('||')}`
+                                : watchKeys[0];
+                            keyToItem.set(itemKey, { item, index: Math.min(...cluster.map(c => c.index)) });
+                            const keyEsc = Utils.escapeHtml(watchKeys.join('||'));
                             const inlineStatusHtml = statusHtml.replace(/status-badge/g, 'status-inline').replace(/direction_badge/g, 'dir-badge');
                             let etaMultiHtml = `<span class="eta-min">${Utils.escapeHtml(etaDisplay)}</span>`;
                             if (extraETAs.length > 0) etaMultiHtml += `<span class="eta-min small">${Utils.escapeHtml(extraETAs.join(' · '))}</span>`;
@@ -2797,7 +2980,7 @@
                                     <div class="walk-info">${walkText}${inlineStatusHtml ? ` ${inlineStatusHtml}` : ''}</div>
                                 </div>
                                 <div class="route-right">
-                                    <button class="del-btn" data-key="${keyEsc}">✕</button>
+                                    <button class="del-btn" data-key="${keyEsc}" data-keys="${keyEsc}">✕</button>
                                     <div class="eta-multi">${etaMultiHtml}</div>
                                 </div>
                             `;
@@ -2914,7 +3097,7 @@
                     if (!started) this._setVoiceListening(false);
                 }
                 _companyLabel(company) {
-                    return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : company === 'MTR' ? '地鐵' : '嶼巴';
+                    return company === 'KMB' ? '九巴' : company === 'CTB' ? '城巴' : company === 'JOINT' ? '聯營' : company === 'MTR' ? '地鐵' : '嶼巴';
                 }
                 _walkLabel(dist, walkMins) {
                     const mins = (walkMins != null && isFinite(walkMins)) ? walkMins : NearbyIndex.walkMins(dist);
@@ -2934,7 +3117,7 @@
                     return '';
                 }
                 _nearbyRouteButtonHtml(r) {
-                    const co = this._companyLabel(r.company);
+                    const co = this._companyLabel(r.displayCompany || r.company);
                     const name = StopPlates.label(r.stopName || '', r.stopId);
                     const walk = this._walkLabel(r.dist, r.walkMins);
                     const destName = r.destStopName ? StopPlates.label(r.destStopName, r.destStopId) : '';
@@ -2958,7 +3141,13 @@
                     const label = (r.kind === 'mtr') ? '地鐵' : (r.kind === 'transfer' ? (r.routeLabel || '轉乘') : r.route);
                     const note = this._routeServiceNote(r);
                     const noteHtml = note ? `<span class="svc-note">${Utils.escapeHtml(note)}</span>` : '';
-                    return `<button type="button" class="route-hit nearby-route-hit" data-kind="${Utils.escapeHtml(kind)}" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat || ''}" data-lng="${r.lng || ''}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}" data-summary="${Utils.escapeHtml(r.summary || '')}"><span class="badge badge-${String(r.company || '').toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(label)}${noteHtml}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
+                    const jointCo = r.jointCompany || '';
+                    const jointStop = r.jointStopId || '';
+                    const jointName = r.jointStopName || '';
+                    const jointLat = r.jointLat || '';
+                    const jointLng = r.jointLng || '';
+                    const jointRouteId = r.jointRouteId || '';
+                    return `<button type="button" class="route-hit nearby-route-hit" data-kind="${Utils.escapeHtml(kind)}" data-company="${Utils.escapeHtml(r.company)}" data-route="${Utils.escapeHtml(r.route)}" data-stop-id="${Utils.escapeHtml(r.stopId)}" data-stop-name="${Utils.escapeHtml(r.stopName || '')}" data-lat="${r.lat || ''}" data-lng="${r.lng || ''}" data-route-id="${Utils.escapeHtml(routeId)}" data-direction="${Utils.escapeHtml(dir)}" data-dest-stop-id="${Utils.escapeHtml(destId)}" data-summary="${Utils.escapeHtml(r.summary || '')}" data-joint-company="${Utils.escapeHtml(jointCo)}" data-joint-stop-id="${Utils.escapeHtml(jointStop)}" data-joint-stop-name="${Utils.escapeHtml(jointName)}" data-joint-lat="${jointLat}" data-joint-lng="${jointLng}" data-joint-route-id="${Utils.escapeHtml(jointRouteId)}"><span class="badge badge-${String(r.displayCompany || r.company || '').toLowerCase()}">${Utils.escapeHtml(co)}</span><span class="route-hit-no">${Utils.escapeHtml(label)}${noteHtml}</span><span class="route-hit-meta">${Utils.escapeHtml(meta)}</span></button>`;
                 }
                 _renderNearbyRouteSection(routes, originLabel, mode) {
                     const sec = document.createElement('div');
@@ -4150,25 +4339,50 @@
                             direction: wantDir || 'outbound', seq: 0, serviceType: 1, routeId
                         }];
                         let added = 0, existed = 0;
-                        for (const s of picked) {
+                        const addStop = (s, co, rte, sid, sname, slat, slng, sRouteId) => {
                             const item = {
-                                company: s.company || company,
-                                route: s.route || route,
-                                stopId: s.stopId,
-                                stopName: s.stopName || stopName,
+                                company: s.company || co,
+                                route: s.route || rte,
+                                stopId: s.stopId || sid,
+                                stopName: s.stopName || sname,
                                 direction: s.direction || 'outbound',
                                 seq: s.seq || 0,
                                 serviceType: s.serviceType || 1,
-                                lat: s.lat || lat,
-                                lng: s.lng || lng,
-                                routeId: s.routeId || routeId
+                                lat: s.lat || slat,
+                                lng: s.lng || slng,
+                                routeId: s.routeId || sRouteId
                             };
                             if (this.watchList.add(item)) added += 1;
                             else existed += 1;
+                        };
+                        for (const s of picked) addStop(s, company, route, stopId, stopName, lat, lng, routeId);
+                        const jointCompany = chip.dataset.jointCompany || '';
+                        const jointStopId = chip.dataset.jointStopId || '';
+                        if (jointCompany && jointStopId) {
+                            try {
+                                const jointStops = await BusAPI.getStops(jointCompany, route, null);
+                                let jointMatches = (jointStops || []).filter(s => s && !s.error && String(s.stopId) === String(jointStopId));
+                                if (!jointMatches.length) {
+                                    jointMatches = [{
+                                        company: jointCompany, route, stopId: jointStopId,
+                                        stopName: chip.dataset.jointStopName || '',
+                                        lat: parseFloat(chip.dataset.jointLat) || 0,
+                                        lng: parseFloat(chip.dataset.jointLng) || 0,
+                                        direction: wantDir || 'outbound', seq: 0, serviceType: 1,
+                                        routeId: chip.dataset.jointRouteId || null
+                                    }];
+                                }
+                                for (const s of jointMatches) {
+                                    addStop(s, jointCompany, route, jointStopId, chip.dataset.jointStopName || '', parseFloat(chip.dataset.jointLat) || 0, parseFloat(chip.dataset.jointLng) || 0, chip.dataset.jointRouteId || null);
+                                }
+                            } catch (jointErr) {
+                                console.warn('加入聯營另一公司失敗:', jointErr);
+                            }
                         }
                         if (added) {
                             this.fetchETA();
-                            this.showToast(added > 1 ? `已加入 ${company} ${route}（${added} 個方向）` : `已加入 ${company} ${route}`);
+                            const label = (jointCompany && NearbyIndex.isJointRoute(route)) ? `聯營 ${route}` : `${company} ${route}`;
+                            this.showToast(added > 1 ? `已加入 ${label}（${added} 個項目）` : `已加入 ${label}`);
                         } else if (existed) {
                             this.showToast('呢條路線已經喺關注清單');
                             chip.disabled = false;
